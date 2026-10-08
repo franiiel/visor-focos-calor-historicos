@@ -1,7 +1,7 @@
 // Department heat-hotspot viewer (ES module). Leaflet (L) and Chart.js (Chart) are
 // loaded as pinned UMD scripts by index.php.
 import { buildScale, colorFor, legendItems, formatNumber, formatAnomaly } from './scales.js';
-import { parseMonthCsv, splitMonth, monthLabel, MONTH_NAMES } from './data.js';
+import { parseMonthCsv, splitMonth, monthLabel, MONTH_NAMES, createLatestGuard } from './data.js';
 
 const L = globalThis.L;
 const Chart = globalThis.Chart;
@@ -23,6 +23,10 @@ const state = {
   geoLayer: null,
   chart: null,
 };
+
+// Only the latest month load and the latest department click may touch the UI.
+const monthGuard = createLatestGuard();
+const seriesGuard = createLatestGuard();
 
 const $ = (id) => document.getElementById(id);
 
@@ -144,13 +148,24 @@ function restyle() {
 
 async function loadMonth(month) {
   if (!state.months.includes(month)) return;
-  if (!state.monthCache.has(month)) {
-    const res = await fetch(`datos/focos_${month}.csv`);
-    if (!res.ok) throw new Error(`No se pudo leer el archivo del mes ${month} (HTTP ${res.status})`);
-    state.monthCache.set(month, parseMonthCsv(await res.text()));
+  const token = monthGuard.next();
+  let rows = state.monthCache.get(month);
+  if (!rows) {
+    try {
+      const res = await fetch(`datos/focos_${month}.csv`);
+      if (!res.ok) throw new Error(`No se pudo leer el archivo del mes ${month} (HTTP ${res.status})`);
+      rows = parseMonthCsv(await res.text());
+    } catch (err) {
+      // A failure of a superseded request is not reported: the newer one owns the UI.
+      if (!monthGuard.isCurrent(token)) return;
+      throw err;
+    }
+    state.monthCache.set(month, rows);
   }
+  // Ignore a late response if another month was selected meanwhile.
+  if (!monthGuard.isCurrent(token)) return;
   state.month = month;
-  state.rows = state.monthCache.get(month);
+  state.rows = rows;
   restyle();
   updateChartMarker();
 }
@@ -199,9 +214,16 @@ async function selectDepartment(props) {
   state.geoLayer.setStyle(featureStyle);
   $('panel-title').textContent = `${props.depto} (${props.provincia})`;
   $('panel-info').textContent = 'Cargando serie…';
+  const token = seriesGuard.next();
+  // Drop the previous department's series so a month change while loading cannot
+  // write its numbers into the panel under the new title.
+  state.series = null;
+  let series;
   try {
-    state.series = await fetchJson(`serie.php?in1=${encodeURIComponent(props.in1)}`, 'serie.php');
+    series = await fetchJson(`serie.php?in1=${encodeURIComponent(props.in1)}`, 'serie.php');
   } catch (err) {
+    // Ignore a late failure if another department was clicked meanwhile.
+    if (!seriesGuard.isCurrent(token)) return;
     state.series = null;
     $('panel-info').textContent = `No se pudo cargar la serie del departamento (${err.message}).`;
     if (state.chart) state.chart.destroy();
@@ -209,7 +231,8 @@ async function selectDepartment(props) {
     return;
   }
   // Ignore a late response if another department was clicked meanwhile.
-  if (!state.selected || state.selected.in1 !== props.in1) return;
+  if (!seriesGuard.isCurrent(token)) return;
+  state.series = series;
   renderChart();
 }
 

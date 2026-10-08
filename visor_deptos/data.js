@@ -43,3 +43,13 @@ export function monthLabel(aaaamm) {
   const { year, month } = splitMonth(aaaamm);
   return `${MONTH_NAMES[month - 1]} ${year}`;
 }
+
+// Sequences async requests so only the latest one may apply its result:
+// take a token with next() before awaiting, then check isCurrent(token) after.
+export function createLatestGuard() {
+  let latest = 0;
+  return {
+    next: () => ++latest,
+    isCurrent: (token) => token === latest,
+  };
+}
