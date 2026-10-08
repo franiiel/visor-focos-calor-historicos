@@ -12,6 +12,18 @@
 const SERIES_CLIM_FROM = '200101';
 const SERIES_CLIM_TO = '202012';
 
+/** A monthly CSV that cannot be used. $csvName is the base name only (no directory). */
+class SeriesCsvException extends RuntimeException
+{
+    public $csvName;
+
+    public function __construct($csvName, $message)
+    {
+        parent::__construct($message);
+        $this->csvName = $csvName;
+    }
+}
+
 /** Returns [AAAAMM => path], sorted by month. */
 function series_list_csv($dataDir)
 {
@@ -35,18 +47,24 @@ function series_number($text, $asInt)
     return $asInt ? (int) round((float) $text) : (float) $text;
 }
 
-/** Parses one monthly CSV into [in1 => [focos, anomalia]]. */
+/**
+ * Parses one monthly CSV into [in1 => [focos, anomalia]].
+ * Throws SeriesCsvException (naming only the file, not its directory) when the file
+ * cannot be read or lacks a required column, so a broken export is never cached
+ * as an empty month.
+ */
 function series_parse_csv($path)
 {
     $rows = [];
-    $fh = fopen($path, 'r');
+    $name = basename($path);
+    $fh = @fopen($path, 'r');
     if ($fh === false) {
-        return $rows;
+        throw new SeriesCsvException($name, "Cannot read $name");
     }
     $header = fgetcsv($fh, 0, ",", "\"", "");
     if (!is_array($header)) {
         fclose($fh);
-        return $rows;
+        throw new SeriesCsvException($name, "$name has no header (expected in1,focos,anomalia)");
     }
     $header = array_map(function ($h) {
         // Strip a UTF-8 BOM and spaces, compare case-insensitively.
@@ -57,7 +75,7 @@ function series_parse_csv($path)
     $iAnom = array_search('anomalia', $header, true);
     if ($iIn1 === false || $iFocos === false || $iAnom === false) {
         fclose($fh);
-        return $rows;
+        throw new SeriesCsvException($name, "$name is missing a required column (expected in1,focos,anomalia)");
     }
     while (($cells = fgetcsv($fh, 0, ",", "\"", "")) !== false) {
         $in1 = trim((string) ($cells[$iIn1] ?? ''));
@@ -129,34 +147,46 @@ function series_build($dataDir)
     return ['months' => $months, 'data' => $data, 'clim' => $clim];
 }
 
-/** Newest modification time among the CSVs and the data directory itself. */
-function series_newest_mtime($dataDir)
+/**
+ * Fingerprint of the data directory: sha1 over the sorted "name:size:mtime" of every
+ * monthly CSV. Unlike a plain mtime comparison (1-second resolution), it also changes
+ * when a file is rewritten within the same second with a different size, or when a
+ * file is added or removed (including files copied with an old preserved mtime).
+ */
+function series_data_fingerprint($dataDir)
 {
     clearstatcache();
-    // The directory mtime changes when a file is added or removed, which also covers
-    // files copied with an old preserved mtime.
-    $newest = (int) @filemtime($dataDir);
+    $parts = [];
     foreach (series_list_csv($dataDir) as $path) {
-        $newest = max($newest, (int) @filemtime($path));
+        $parts[] = basename($path) . ':' . (int) @filesize($path) . ':' . (int) @filemtime($path);
     }
-    return $newest;
+    return sha1(implode("
+", $parts));
 }
 
 /**
- * Returns the consolidated series as a JSON string, rebuilding the cache file
- * only when it is missing or older than any CSV. If the cache cannot be written,
- * the freshly built JSON is still returned.
+ * Returns the consolidated series as a JSON string. The cache file holds the data
+ * fingerprint on its first line and the JSON after it; it is served only when the
+ * stored fingerprint equals the current one. The fingerprint is taken before the
+ * CSVs are read, so a file changed during a build makes the next request rebuild.
+ * If the cache cannot be written, the freshly built JSON is still returned.
  */
 function series_cached_json($dataDir, $cacheFile)
 {
-    clearstatcache();
-    if (is_file($cacheFile) && filemtime($cacheFile) >= series_newest_mtime($dataDir)) {
-        $json = file_get_contents($cacheFile);
-        if ($json !== false && $json !== '') {
-            return $json;
+    $fingerprint = series_data_fingerprint($dataDir);
+    if (is_file($cacheFile)) {
+        $raw = file_get_contents($cacheFile);
+        $nl = $raw === false ? false : strpos($raw, "
+");
+        if ($nl !== false && substr($raw, 0, $nl) === $fingerprint) {
+            $json = substr($raw, $nl + 1);
+            if ($json !== '') {
+                return $json;
+            }
         }
     }
 
+    // series_build throws on a broken CSV, so a partial result is never cached.
     $json = json_encode(series_build($dataDir));
     if ($json === false) {
         throw new RuntimeException('json_encode failed: ' . json_last_error_msg());
@@ -169,7 +199,8 @@ function series_cached_json($dataDir, $cacheFile)
     }
     // tempnam silently falls back to the system temp dir, so check writability first.
     $tmp = is_writable($dir) ? @tempnam($dir, 'serie_') : false;
-    if ($tmp !== false && file_put_contents($tmp, $json) !== false) {
+    if ($tmp !== false && file_put_contents($tmp, $fingerprint . "
+" . $json) !== false) {
         @chmod($tmp, 0644);
         if (!@rename($tmp, $cacheFile)) {
             @unlink($tmp);

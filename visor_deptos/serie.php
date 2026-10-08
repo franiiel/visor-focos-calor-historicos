@@ -28,6 +28,10 @@ if (isset($_GET['in1'])) {
 
 try {
     $json = series_cached_json(__DIR__ . '/datos', __DIR__ . '/cache/serie.json');
+} catch (SeriesCsvException $e) {
+    // Name the file only; the absolute path stays in the server log.
+    error_log('serie.php: ' . $e->getMessage());
+    serie_error(500, 'Archivo de datos inválido: ' . $e->csvName . ' (se esperan las columnas in1,focos,anomalia).');
 } catch (Throwable $e) {
     error_log('serie.php: ' . $e->getMessage());
     serie_error(500, 'No se pudo armar la serie.');
