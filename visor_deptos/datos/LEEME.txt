@@ -1,0 +1,13 @@
+DATOS SINTETICOS DE PRUEBA
+
+Los archivos focos_AAAAMM.csv de esta carpeta fueron generados por
+tools/generate_synthetic.mjs para el prototipo del visor. Son datos inventados
+con una forma plausible (estacionalidad y diferencias regionales) y NO
+representan focos de calor reales.
+
+Formato: in1,focos,anomalia (una fila por departamento).
+Supuesto del prototipo: anomalia = focos - promedio de focos del mismo
+departamento y el mismo mes calendario en 2001-2020.
+
+Para usar datos reales, reemplazar estos archivos por los CSV de SEPA con el
+mismo nombre y formato. No hace falta cambiar codigo.
