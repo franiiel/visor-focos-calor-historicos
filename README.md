@@ -51,9 +51,10 @@ Supuesto del prototipo: `anomalia = focos − promedio de focos del mismo depart
 
 ```sh
 node --test "tools/test/*.test.mjs"
+php tools/test/series_test.php
 ```
 
-Cubren las escalas y el formato (`scales.js`), la lectura de CSV (`data.js`) y el generador (determinismo y formato de los archivos). Los archivos PHP no tienen pruebas automáticas.
+Las pruebas de Node cubren las escalas y el formato (`scales.js`), la lectura de CSV y el control de pedidos superpuestos (`data.js`) y el generador (determinismo y formato de los archivos). La prueba de PHP no usa frameworks: cubre `lib/series.php` (forma de la serie, huella de la carpeta `datos/`, reutilización del caché y error ante un CSV sin las columnas requeridas) y termina con código 0 si todo pasa.
 
 ## Servir el visor
 

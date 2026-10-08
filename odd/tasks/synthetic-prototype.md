@@ -26,6 +26,7 @@ Validate design (map, layers, tooltip, series chart, PHP endpoints) before the m
 - [x] T3 `listar.php` and `serie.php` (cached consolidated series, optional validated `in1`, 2001–2020 monthly climatology). Route: delegated (written); verified inline with PHP 8.3.
 - [x] T4 Viewer: `index.php` with header/footer partials, `app.js`, `app.css`, pure `scales.js` with node tests. Route: delegated (written); verified inline in headless Chrome; basemap fix inline.
 - [x] T5 Docs: README run instructions, `CLAUDE.md` commands. Route: delegated.
+- [x] T6 Review follow-ups (5 non-blocking findings from the RDD review). Route: delegated (writer, 2+ non-trivial files). Not committed yet.
 
 ## Acceptance criteria
 
@@ -83,13 +84,28 @@ T3/T4 verification (PHP 8.3.33 installed via `winget install PHP.PHP.8.3`, serve
 Native review (RDD)
 - Range `main..334987c`: risk medium, `slice_budget_reached`, consent granted. START refused with `lens_context_budget_exceeded`: the full range, including the 380 KB `deptos.geo.json`, exceeds the reviewer budget.
 - Reduced range `573cabc..334987c` (20 files, 1732 lines, geometry commit excluded): consent granted, lens `review-reliability` → **approved**, acknowledged (authority burned). The geometry commit stays unreviewed by RDD; it was verified structurally (counts, join check).
-- Non-blocking follow-ups:
-  - `app.js:203-212`: a stale series response overwrites `state.series`, and its error branch has no staleness guard.
-  - `app.js:145-155`: `loadMonth` has no request sequencing, so a late fetch can leave the map out of sync with the selects.
-  - `lib/series.php:153`: the cache freshness check uses 1-second mtime resolution, so stale data can be served if a CSV changes in the same second.
-  - `lib/series.php:58-61`: a CSV with a bad header becomes an all-null month in silence (the client throws instead).
-  - `listar.php:4`: `glob` can return `false`, which is not guarded; the pattern uses `$` instead of `\z`.
+- Non-blocking follow-ups (all fixed in T6, see below):
+  - [x] `app.js:203-212`: a stale series response overwrites `state.series`, and its error branch has no staleness guard.
+  - [x] `app.js:145-155`: `loadMonth` has no request sequencing, so a late fetch can leave the map out of sync with the selects.
+  - [x] `lib/series.php:153`: the cache freshness check uses 1-second mtime resolution, so stale data can be served if a CSV changes in the same second.
+  - [x] `lib/series.php:58-61`: a CSV with a bad header becomes an all-null month in silence (the client throws instead).
+  - [x] `listar.php:4`: `glob` can return `false`, which is not guarded; the pattern uses `$` instead of `\z`.
+
+T6 Review follow-ups
+- Stale requests (findings 1-2): pure `createLatestGuard()` in `data.js` (`next()` returns a token, `isCurrent(token)`). `selectDepartment` and `loadMonth` take a token before awaiting; only the current token may touch state, chart, or panel, or report an error. `selectDepartment` also clears `state.series` on click, so a month change while loading cannot show the previous department's numbers under the new title.
+- Cache freshness (finding 3): `series_data_fingerprint()` = sha1 over the sorted `name:size:mtime` of every `focos_*.csv`, taken before the CSVs are read. The cache file stores the fingerprint on its first line and the JSON after it, and is served only on an exact match. Atomic write and unwritable-cache fallback kept.
+- Bad header (finding 4): `series_parse_csv` throws `SeriesCsvException` (base file name only) for an unreadable file, a missing header, or a missing column. `serie.php` logs it and answers 500 `{"error": "Archivo de datos inválido: focos_AAAAMM.csv (...)"}`; nothing is cached.
+- `listar.php` (finding 5): `glob(...) ?: []` and `\z`. The same snippet is updated in `VISOR_FOCOS.md`, along with the cache description there.
+- RED: `node --test "tools/test/*.test.mjs"` → `data.test.mjs` fails (`does not provide an export named 'createLatestGuard'`). New `php tools/test/series_test.php` → 21 checks, 10 failed, exit 1 (no fingerprint function; a same-mtime rewrite served the stale cache; a bad header did not throw).
+- GREEN: `node --test "tools/test/*.test.mjs"` → 24 tests, 24 pass. `php tools/test/series_test.php` → 21 checks, 0 failed, exit 0. `php -l` clean on `lib/series.php`, `serie.php`, `listar.php`, `tools/test/series_test.php`. `node --check` OK on `app.js`, `data.js`.
+- Integration (`php -S localhost:8001 -t visor_deptos`):
+  - `listar.php` → 308 months.
+  - `serie.php` → 200 (1,128,739 bytes); the second request reused the cache (mtime unchanged).
+  - `?in1=06007` → 200, `abc` → 400, `99999` → 404.
+  - `touch datos/focos_200101.csv` → rebuilt (new fingerprint).
+  - Corrupted header of `focos_201505.csv` → 500 `{"error":"Archivo de datos inválido: focos_201505.csv (se esperan las columnas in1,focos,anomalia)."}`, cache untouched, `error_log` line in the server log. Restored with `node tools/generate_synthetic.mjs` (header back to `in1,focos,anomalia`, `serie.php` → 200).
+- Not re-checked: browser behaviour of the guards (no headless run in T6); covered by the guard unit tests and `node --check`.
 
 ## Next step
 
-Fix the review follow-ups; then integration questions for SEPA (real CSV export, anomaly unit, header/footer, Apache `.htaccess`).
+Commit T6 as a work unit; then integration questions for SEPA (real CSV export, anomaly unit, header/footer, Apache `.htaccess`).
