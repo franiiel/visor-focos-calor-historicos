@@ -35,7 +35,7 @@ Validate design (map, layers, tooltip, series chart, PHP endpoints) before the m
 
 ## Progress / evidence
 
-Environment: Windows, Node v24.19.0, npm 11.17.0, no PHP. No commits (git identity not configured).
+Environment: Windows, Node v24.19.0, npm 11.17.0, no PHP initially (PHP 8.3 installed later for T3/T4). Work-unit commits `d448c3e..334987c` (docs, geometry, data, api, viewer, docs).
 
 T1 Geometry
 - Source: 731 features, 532 distinct departments. `LINK` is unpadded for Buenos Aires (e.g. `"6441"`) and repeated across multi-part departments (e.g. `94014` ×57); `LINK == COD_PROV*1000+COD_DEPTO` for all features. Normalized with `padStart(5,'0')` and dissolved by `in1`.
@@ -80,6 +80,16 @@ T3/T4 verification (PHP 8.3.33 installed via `winget install PHP.PHP.8.3`, serve
   - Only console error: `favicon.ico` 404 (the real SEPA header provides it).
 - Bug found and fixed: the CARTO basemap rendered "API KEY REQUIRED" watermarks. Switched to the IGN Argenmap TMS, the same one used by `seccion-focos`; re-checked visually. README updated.
 
+Native review (RDD)
+- Range `main..334987c`: risk medium, `slice_budget_reached`, consent granted. START refused with `lens_context_budget_exceeded`: the full range, including the 380 KB `deptos.geo.json`, exceeds the reviewer budget.
+- Reduced range `573cabc..334987c` (20 files, 1732 lines, geometry commit excluded): consent granted, lens `review-reliability` → **approved**, acknowledged (authority burned). The geometry commit stays unreviewed by RDD; it was verified structurally (counts, join check).
+- Non-blocking follow-ups:
+  - `app.js:203-212`: a stale series response overwrites `state.series`, and its error branch has no staleness guard.
+  - `app.js:145-155`: `loadMonth` has no request sequencing, so a late fetch can leave the map out of sync with the selects.
+  - `lib/series.php:153`: the cache freshness check uses 1-second mtime resolution, so stale data can be served if a CSV changes in the same second.
+  - `lib/series.php:58-61`: a CSV with a bad header becomes an all-null month in silence (the client throws instead).
+  - `listar.php:4`: `glob` can return `false`, which is not guarded; the pattern uses `$` instead of `\z`.
+
 ## Next step
 
-Configure the git identity so the work-unit commits can be made; then integration questions for SEPA (real CSV export, anomaly unit, header/footer, Apache `.htaccess`).
+Fix the review follow-ups; then integration questions for SEPA (real CSV export, anomaly unit, header/footer, Apache `.htaccess`).
