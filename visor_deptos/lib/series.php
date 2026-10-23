@@ -1,6 +1,7 @@
 <?php
 // Consolidates the monthly CSVs (datos/<filePrefix>_AAAAMM.csv) into one series object
-// and caches it as JSON. $config is the array returned by visor_config() (lib/config.php).
+// and caches it as JSON. $config is the array returned by visor_config(), so callers
+// load lib/config.php first.
 // PHP 7.4+ compatible, no dependencies.
 //
 // Consolidated shape (all arrays aligned to "months"):
@@ -57,7 +58,7 @@ function series_parse_csv($path, $config)
     $name = basename($path);
     $valueCol = $config['columns']['value'];
     $anomalyCol = $config['columns']['anomaly'];
-    $expected = "in1,$valueCol,$anomalyCol";
+    $expected = visor_expected_header($config);
     $fh = @fopen($path, 'r');
     if ($fh === false) {
         throw new SeriesCsvException($name, "Cannot read $name");
@@ -152,9 +153,11 @@ function series_build($dataDir, $config)
 
 /**
  * Fingerprint of the config and the data directory: sha1 over the config and the sorted
- * "name:size:mtime" of every monthly CSV, so editing config.json also rebuilds. Unlike a plain mtime comparison (1-second resolution), it also changes
- * when a file is rewritten within the same second with a different size, or when a
- * file is added or removed (including files copied with an old preserved mtime).
+ * "name:size:mtime" of every monthly CSV. Any config.json edit rebuilds the cache, even
+ * one that only changes a UI text; that is cheap and keeps the rule simple.
+ * Unlike a plain mtime comparison (1-second resolution), it also changes when a file
+ * is rewritten within the same second with a different size, or when a file is added
+ * or removed (including files copied with an old preserved mtime).
  */
 function series_data_fingerprint($dataDir, $config)
 {

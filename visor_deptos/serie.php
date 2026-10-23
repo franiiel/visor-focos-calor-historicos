@@ -36,8 +36,8 @@ try {
 } catch (SeriesCsvException $e) {
     // Name the file only; the absolute path stays in the server log.
     error_log('serie.php: ' . $e->getMessage());
-    $columns = 'in1,' . $config['columns']['value'] . ',' . $config['columns']['anomaly'];
-    serie_error(500, 'Archivo de datos inválido: ' . $e->csvName . " (se esperan las columnas $columns).");
+    serie_error(500, 'Archivo de datos inválido: ' . $e->csvName
+        . ' (se esperan las columnas ' . visor_expected_header($config) . ').');
 } catch (Throwable $e) {
     error_log('serie.php: ' . $e->getMessage());
     serie_error(500, 'No se pudo armar la serie.');

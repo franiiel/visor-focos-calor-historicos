@@ -17,7 +17,10 @@ function readConfig() {
   }
 }
 
+// The null fallbacks only keep these lines from throwing: init() stops before use
+// when the config is missing.
 const config = readConfig();
+// Display rounding only; non-integer values keep full precision in the data.
 const VALUE_DECIMALS = config && config.integerValues ? 0 : 1;
 const UNIT = config ? config.unit : '';
 const UNIT_TITLE = UNIT.charAt(0).toUpperCase() + UNIT.slice(1);

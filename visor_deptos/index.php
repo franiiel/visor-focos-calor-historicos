@@ -62,7 +62,7 @@ include __DIR__ . '/partials/header.php';
       <h2 id="panel-title">Serie del departamento</h2>
       <p id="panel-info" class="visor-hint">Seleccione un departamento en el mapa para ver su serie mensual.</p>
       <div class="visor-chart-wrap">
-        <canvas id="chart" aria-label="Serie mensual del departamento" role="img"></canvas>
+        <canvas id="chart" aria-label="Serie mensual de <?php echo h($config['unit']); ?> del departamento" role="img"></canvas>
       </div>
     </aside>
   </div>

@@ -179,6 +179,14 @@ check('config.json: loads and matches the SEPA contract',
 
 $root = make_dir();
 $file = $root . '/config.json';
+file_put_contents($file, "\xEF\xBB\xBF" . json_encode($real));
+$withBom = null;
+try {
+    $withBom = visor_config($file);
+} catch (VisorConfigException $e) {
+}
+check('config: a UTF-8 BOM is accepted', $withBom === $real);
+
 $invalid = [
     'not JSON' => '{',
     'path in prefix' => ['filePrefix' => '../x'],
@@ -231,7 +239,10 @@ require __DIR__ . "/" . $argv[1];
 $viewer = __DIR__ . '/../../visor_deptos';
 $root = make_dir();
 mkdir($root . '/lib');
-foreach (['listar.php', 'serie.php', 'config.json', 'lib/config.php', 'lib/series.php'] as $file) {
+mkdir($root . '/partials');
+$copied = ['index.php', 'listar.php', 'serie.php', 'config.json', 'lib/config.php', 'lib/series.php',
+    'partials/header.php', 'partials/footer.php'];
+foreach ($copied as $file) {
     copy("$viewer/$file", "$root/$file");
 }
 write_csv($root . '/datos', '200102', "in1,focos,anomalia\n06007,5,0\n");
@@ -258,12 +269,22 @@ check('serie.php: 200 with keys months, data, clim', $status === 200 && is_array
 check('serie.php?in1=abc: 400', run_endpoint($root, 'serie.php', 'in1=abc')[0] === 400);
 check('serie.php?in1=99999: 404', run_endpoint($root, 'serie.php', 'in1=99999')[0] === 404);
 
+list($status, $out) = run_endpoint($root, 'index.php');
+preg_match('#<script type="application/json" id="visor-config">(.*?)</script>#s', $out, $m);
+check('index.php: 200', $status === 200);
+check('index.php: embeds config.json for app.js', isset($m[1]) && json_decode($m[1], true) === $real);
+check('index.php: title and chart label come from the config',
+    strpos($out, '<h1 class="visor-title">' . htmlspecialchars($real['title']) . '</h1>') !== false
+    && strpos($out, 'aria-label="Serie mensual de ' . htmlspecialchars($real['unit']) . ' del departamento"') !== false);
+
 file_put_contents($root . '/config.json', json_encode(array_replace($real, ['filePrefix' => '../x'])));
 foreach (['listar.php', 'serie.php'] as $script) {
     list($status, $out) = run_endpoint($root, $script);
     check("$script: invalid config is a 500 naming config.json",
         $status === 500 && strpos((string) (json_decode($out, true)['error'] ?? ''), 'config.json') !== false);
 }
+list($status, $out) = run_endpoint($root, 'index.php');
+check('index.php: invalid config is a 500 naming config.json', $status === 500 && strpos($out, 'config.json') !== false);
 remove_dir($root);
 
 echo "\n$checks checks, $failures failed\n";

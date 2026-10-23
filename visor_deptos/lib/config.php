@@ -12,7 +12,8 @@ function visor_config($file)
 {
     $name = basename($file);
     $raw = @file_get_contents($file);
-    $config = $raw === false ? null : json_decode($raw, true);
+    // Windows editors often save a UTF-8 BOM, which json_decode rejects.
+    $config = $raw === false ? null : json_decode(preg_replace('/^\xEF\xBB\xBF/', '', $raw), true);
     if (!is_array($config)) {
         throw new VisorConfigException("$name is missing or is not valid JSON");
     }
@@ -47,4 +48,10 @@ function visor_config($file)
         throw new VisorConfigException("$name: \"climatology\" needs \"from\" <= \"to\" as AAAAMM strings (MM 01-12)");
     }
     return $config;
+}
+
+/** The CSV header the config expects, e.g. "in1,focos,anomalia" (for error messages). */
+function visor_expected_header($config)
+{
+    return 'in1,' . $config['columns']['value'] . ',' . $config['columns']['anomaly'];
 }
