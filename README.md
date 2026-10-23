@@ -13,9 +13,10 @@ Mapa interactivo de focos de calor mensuales y su anomalía por departamento de 
 | `visor_deptos/scales.js`, `data.js` | Funciones puras: escalas de color, leyenda, formato de números y lectura de los CSV. |
 | `visor_deptos/listar.php` | Lista los meses disponibles en `datos/`. No recibe parámetros. |
 | `visor_deptos/serie.php` | Devuelve la serie consolidada y la guarda en `cache/serie.json`. Acepta `in1` opcional (5 dígitos). |
-| `visor_deptos/lib/series.php` | Lectura de los CSV y armado de la serie, usado por `serie.php`. |
+| `visor_deptos/config.json` | Conjunto de datos que muestra el visor: prefijo y columnas de los CSV, período de referencia y textos. Ver «Cambiar el conjunto de datos». |
+| `visor_deptos/lib/config.php`, `lib/series.php` | Lectura y validación de `config.json`; lectura de los CSV y armado de la serie. |
 | `visor_deptos/deptos.geo.json` | Geometría simplificada de los 532 departamentos (unos 380 KB). |
-| `visor_deptos/datos/` | Un CSV por mes: `focos_AAAAMM.csv`. |
+| `visor_deptos/datos/` | Un CSV por mes: `focos_AAAAMM.csv` (el prefijo lo define `config.json`). |
 | `tools/` | Herramientas de un solo uso (no se suben al sitio) y pruebas. |
 
 Librerías, con versión fija: Leaflet 1.9.4 (unpkg) y Chart.js 4.5.1 (jsDelivr). Mapa base: Argenmap del IGN, el mismo que usa el visor de focos de los últimos 5 días.
@@ -54,7 +55,7 @@ node --test "tools/test/*.test.mjs"
 php tools/test/series_test.php
 ```
 
-Las pruebas de Node cubren las escalas y el formato (`scales.js`), la lectura de CSV y el control de pedidos superpuestos (`data.js`) y el generador (determinismo y formato de los archivos). La prueba de PHP no usa frameworks: cubre `lib/series.php` (forma de la serie, huella de la carpeta `datos/`, reutilización del caché y error ante un CSV sin las columnas requeridas) y termina con código 0 si todo pasa.
+Las pruebas de Node cubren las escalas y el formato (`scales.js`), la lectura de CSV y el control de pedidos superpuestos (`data.js`) y el generador (determinismo y formato de los archivos). La prueba de PHP no usa frameworks: cubre `lib/series.php` (forma de la serie, prefijo y columnas configurados, huella de la carpeta `datos/` y de la configuración, reutilización del caché y error ante un CSV sin las columnas requeridas) y la validación de `config.json`, y termina con código 0 si todo pasa.
 
 ## Servir el visor
 
@@ -74,3 +75,13 @@ y abrir <http://localhost:8000/>. Antes hay que generar los datos (ver arriba). 
 4. Quitar el aviso de datos sintéticos de `index.php`.
 
 Los departamentos sin fila en un mes se muestran en gris como «sin dato».
+
+## Cambiar el conjunto de datos
+
+El visor puede mostrar otra serie mensual por departamento con la misma forma (un valor y su anomalía), por ejemplo focos VIIRS, sin tocar código:
+
+1. Dejar en `visor_deptos/datos/` los CSV nuevos, con el nombre `<prefijo>_AAAAMM.csv` y una columna `in1` (código INDEC de 5 dígitos).
+2. Editar `visor_deptos/config.json`: `filePrefix` (el prefijo), `columns.value` y `columns.anomaly` (nombres de las columnas, en minúsculas), `integerValues` (`true` para conteos), `climatology` (período del promedio de referencia) y los textos (`title`, `unit`, `valueLabel`, `valueTitle`, `anomalyTitle`, `note`).
+3. Recargar la página. `serie.php` rearma el caché solo, porque su huella incluye la configuración.
+
+Si `config.json` no es válido, la página y los dos endpoints responden un error 500 que nombra `config.json`; el detalle queda en el log de PHP. La descripción completa está en `VISOR_FOCOS.md` («Configuración del conjunto de datos»).

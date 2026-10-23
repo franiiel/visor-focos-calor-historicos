@@ -3,22 +3,33 @@ import assert from 'node:assert/strict';
 
 import { parseMonthCsv, splitMonth, monthLabel, createLatestGuard } from '../../visor_deptos/data.js';
 
+const COLUMNS = { value: 'focos', anomaly: 'anomalia' };
+
 test('parseMonthCsv keeps in1 as a 5-char string and parses numbers', () => {
-  const rows = parseMonthCsv('in1,focos,anomalia\r\n06007,12,-3.5\n38077,0,0.0\n');
+  const rows = parseMonthCsv('in1,focos,anomalia\r\n06007,12,-3.5\n38077,0,0.0\n', COLUMNS);
   assert.equal(rows.size, 2);
-  assert.deepEqual(rows.get('06007'), { focos: 12, anomalia: -3.5 });
-  assert.deepEqual(rows.get('38077'), { focos: 0, anomalia: 0 });
+  assert.deepEqual(rows.get('06007'), { value: 12, anomaly: -3.5 });
+  assert.deepEqual(rows.get('38077'), { value: 0, anomaly: 0 });
 });
 
 test('parseMonthCsv accepts columns in any order and skips invalid rows', () => {
-  const rows = parseMonthCsv('anomalia,in1,focos\n1.5,02007,4\nbad,xx,1\n,10007,\n');
-  assert.deepEqual(rows.get('02007'), { focos: 4, anomalia: 1.5 });
+  const rows = parseMonthCsv('anomalia,in1,focos\n1.5,02007,4\nbad,xx,1\n,10007,\n', COLUMNS);
+  assert.deepEqual(rows.get('02007'), { value: 4, anomaly: 1.5 });
   assert.equal(rows.has('xx'), false);
-  assert.deepEqual(rows.get('10007'), { focos: null, anomalia: null });
+  assert.deepEqual(rows.get('10007'), { value: null, anomaly: null });
 });
 
-test('parseMonthCsv rejects a file without the required header', () => {
-  assert.throws(() => parseMonthCsv('a,b,c\n1,2,3\n'), /in1/);
+test('parseMonthCsv reads the configured column names', () => {
+  const rows = parseMonthCsv('IN1,Cantidad,anom\n06007,7,2.5\n', { value: 'cantidad', anomaly: 'anom' });
+  assert.deepEqual(rows.get('06007'), { value: 7, anomaly: 2.5 });
+});
+
+test('parseMonthCsv rejects a file without the configured header', () => {
+  assert.throws(() => parseMonthCsv('a,b,c\n1,2,3\n', COLUMNS), /in1,focos,anomalia/);
+  assert.throws(
+    () => parseMonthCsv('in1,focos,anomalia\n06007,1,0\n', { value: 'cantidad', anomaly: 'anom' }),
+    /in1,cantidad,anom/,
+  );
 });
 
 test('splitMonth and monthLabel', () => {

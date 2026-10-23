@@ -9,7 +9,23 @@ function asset_version($file)
     return $t ? (string) $t : '0';
 }
 
-$pageTitle = 'Focos de calor por departamento';
+require __DIR__ . '/lib/config.php';
+try {
+    $config = visor_config(__DIR__ . '/config.json');
+} catch (VisorConfigException $e) {
+    error_log('index.php: ' . $e->getMessage());
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'Configuración inválida: config.json.';
+    exit;
+}
+
+function h($text)
+{
+    return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+}
+
+$pageTitle = $config['title'];
 include __DIR__ . '/partials/header.php';
 ?>
 <main class="visor" id="visor">
@@ -17,7 +33,7 @@ include __DIR__ . '/partials/header.php';
     Prototipo con datos sintéticos de prueba — no representan focos reales.
   </div>
 
-  <h1 class="visor-title">Focos de calor por departamento</h1>
+  <h1 class="visor-title"><?php echo h($config['title']); ?></h1>
   <p class="visor-subtitle" id="map-title" aria-live="polite">Cargando datos…</p>
 
   <form class="visor-controls" id="controls" onsubmit="return false;">
@@ -29,8 +45,8 @@ include __DIR__ . '/partials/header.php';
     </label>
     <fieldset class="visor-layer">
       <legend>Capa</legend>
-      <label><input type="radio" name="layer" value="anomalia" checked> Anomalía</label>
-      <label><input type="radio" name="layer" value="focos"> Focos totales</label>
+      <label><input type="radio" name="layer" value="anomaly" checked> Anomalía</label>
+      <label><input type="radio" name="layer" value="value"> <?php echo h($config['valueLabel']); ?></label>
     </fieldset>
   </form>
 
@@ -46,16 +62,17 @@ include __DIR__ . '/partials/header.php';
       <h2 id="panel-title">Serie del departamento</h2>
       <p id="panel-info" class="visor-hint">Seleccione un departamento en el mapa para ver su serie mensual.</p>
       <div class="visor-chart-wrap">
-        <canvas id="chart" aria-label="Serie mensual de focos del departamento" role="img"></canvas>
+        <canvas id="chart" aria-label="Serie mensual del departamento" role="img"></canvas>
       </div>
     </aside>
   </div>
 
-  <p class="visor-note">
-    Anomalía: diferencia entre los focos del mes y el promedio de focos del mismo mes
-    en 2001–2020 (supuesto del prototipo; la definición final la establece SEPA).
-  </p>
+  <p class="visor-note"><?php echo h($config['note']); ?></p>
 </main>
+
+<script type="application/json" id="visor-config"><?php
+echo json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
+?></script>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H"

@@ -30,10 +30,11 @@ It is a separate product from AgroENSO. Don't reuse its pipeline or couple the t
 
 - **Mirror the existing SEPA viewer** at `/productos/focos/seccion-focos/` (same INTA-UNAHUR agreement): a PHP template with the site header and footer, ES-module JS, plain CSS. No framework, no npm, no build step, no database. Files are edited and uploaded as-is.
 - **Data contract with SEPA:** one CSV per month in `datos/focos_AAAAMM.csv` with columns `in1,focos,anomalia`. SEPA's monthly process drops these files; the viewer must pick them up with no code changes.
+- **Dataset config:** `visor_deptos/config.json` (validated by `lib/config.php`) holds everything dataset-specific: CSV prefix, value/anomaly column names, integer rounding, climatology period and UI texts. Its defaults are the SEPA contract above. Never hardcode those in code; internally the two columns are always `value` and `anomaly`. One dataset per installation.
 - **Join key:** `in1` is the 5-digit INDEC department code, stored as a string so the leading zero is kept. It matches `LINK` in SEPA's `DEPTOS-PROV.geojson`. Never join by `id` (it has no zero padding) or by name.
 - **PHP endpoints:**
   - `listar.php` takes no parameters and lists the available months.
-  - `serie.php` builds and caches `cache/serie.json`, regenerating it when the data fingerprint (sha1 of every CSV's name, size and mtime) differs from the one stored in the cache. A CSV without the `in1,focos,anomalia` columns is a 500 error naming the file, never an empty month.
+  - `serie.php` builds and caches `cache/serie.json`, regenerating it when the fingerprint (sha1 of the config plus every CSV's name, size and mtime) differs from the one stored in the cache. A CSV without the configured columns is a 500 error naming the file, never an empty month. An invalid `config.json` is a 500 naming it, on every entry point.
   - Any parameter an endpoint does accept must be strictly validated (e.g. `^\d{5}$`). Path or URI inputs are a known weak spot on the SEPA site (`listar_archivos_MNC.php`, `descargarkml.php`).
 - **Pin CDN library versions** (Leaflet 1.9.4, Chart.js). The existing SEPA viewers load Leaflet unversioned; don't copy that.
 - The geometry is generated once from `DEPTOS-PROV.geojson` (~13 MB, too heavy as-is), simplified and stored as a static file.

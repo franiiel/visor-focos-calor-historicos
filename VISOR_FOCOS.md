@@ -49,9 +49,11 @@ Si cada mes hubiera que correr un script aparte, armar un archivo y subirlo, el 
 ├── index.php            plantilla con el header y el footer del sitio
 ├── app.js               lógica del visor (módulo ES)
 ├── app.css
+├── config.json          qué conjunto de datos muestra el visor (ver "Configuración")
 ├── deptos.geo.json      geometría de departamentos (estática)
 ├── listar.php           devuelve la lista de meses disponibles
 ├── serie.php            devuelve la serie consolidada (con caché)
+├── lib/                 funciones PHP compartidas (no se acceden desde la web)
 ├── cache/
 │   └── serie.json       generado por serie.php, no se edita a mano
 └── datos/
@@ -81,6 +83,34 @@ El formato final lo define lo que el proceso de SEPA pueda exportar más fácil.
 
 **Serie histórica:** para que el gráfico por departamento tenga sentido, hace falta cargar una vez los meses desde 2001 en el mismo formato.
 
+### Configuración del conjunto de datos
+
+El visor no está atado a los focos MODIS. Todo lo que depende del conjunto de datos está en un solo archivo, `config.json`, y el código no cambia:
+
+```json
+{
+  "title": "Focos de calor por departamento",
+  "filePrefix": "focos",
+  "columns": { "value": "focos", "anomaly": "anomalia" },
+  "integerValues": true,
+  "unit": "focos",
+  "valueLabel": "Focos totales",
+  "valueTitle": "Focos de calor totales",
+  "anomalyTitle": "Anomalía de focos de calor",
+  "climatology": { "from": "200101", "to": "202012" },
+  "note": "Anomalía: …"
+}
+```
+
+- `filePrefix` y `columns`: nombre de los CSV (`datos/<filePrefix>_AAAAMM.csv`) y de sus dos columnas numéricas. `in1` es siempre la clave de unión. Con los valores de arriba, el formato es el de "Formato de datos propuesto".
+- `integerValues`: `true` para conteos (se redondean a enteros); `false` para conservar decimales.
+- `climatology`: período del promedio de referencia del gráfico (AAAAMM, inclusive).
+- `title`, `unit`, `valueLabel`, `valueTitle`, `anomalyTitle` y `note`: textos de la página, la leyenda, el tooltip y el gráfico.
+
+Para mostrar otro conjunto con la misma forma (un valor mensual y su anomalía por departamento, por ejemplo focos VIIRS), se reemplazan los CSV de `datos/` y se edita `config.json`. El caché de `serie.php` se regenera solo, porque su huella incluye la configuración. Si `config.json` no es válido (por ejemplo, un prefijo con `/` o `..`), los tres puntos de entrada responden un error 500 que lo nombra.
+
+Cada instalación muestra un solo conjunto. Las escalas de colores están pensadas para conteos (la secuencial reserva una clase para el cero); una variable continua puede necesitar otros cortes.
+
 ### Geometría
 
 Se parte de la capa que ya usa el visor de 5 días: `seccion-focos/data/geoJSON/DEPTOS-PROV.geojson` (fuente INDEC 2005, todos los departamentos del país). Se simplifica **una sola vez** a unos cientos de KB y queda como archivo estático.
@@ -94,25 +124,14 @@ Se parte de la capa que ya usa el visor de 5 días: `seccion-focos/data/geoJSON/
 
 ### Lista de meses: `listar.php`
 
-El visor necesita saber qué meses hay. `listar.php` **no recibe ningún parámetro**: lista la carpeta `datos/` y devuelve los meses encontrados. Sin parámetros no hay nada que validar, y se evita el riesgo de que alguien pida otra carpeta (el problema posible que se observó en `listar_archivos_MNC.php`).
-
-```php
-<?php
-header('Content-Type: application/json');
-$meses = [];
-foreach (glob(__DIR__ . '/datos/focos_*.csv') ?: [] as $f) {
-    if (preg_match('/focos_(\d{6})\.csv\z/', $f, $m)) $meses[] = $m[1];
-}
-sort($meses);
-echo json_encode($meses);
-```
+El visor necesita saber qué meses hay. `listar.php` **no recibe ningún parámetro**: lista la carpeta `datos/` y devuelve los meses encontrados (`["200101", …]`), con el prefijo de `config.json`. Sin parámetros no hay nada que validar, y se evita el riesgo de que alguien pida otra carpeta (el problema posible que se observó en `listar_archivos_MNC.php`). El prefijo viene de un archivo del servidor, no del pedido, y además se valida (`^[a-z0-9_-]+$`) antes de usarlo en la búsqueda de archivos.
 
 ### Serie histórica: `serie.php`
 
 El gráfico de un departamento necesita todos sus meses. Si el navegador tuviera que leer un CSV por mes, para dibujar **un solo gráfico** bajaría unos 300 archivos (2001–2026). Por eso:
 
 - Los CSV mensuales en `datos/` siguen siendo el **contrato con el proceso de SEPA**: no cambia nada para quien los genera.
-- `serie.php` arma un único `cache/serie.json` con todos los departamentos y meses (`{ "06007": { "200101": [focos, anomalia], … }, … }`). Lo regenera solo cuando cambia la carpeta `datos/`: guarda junto al caché una huella de los CSV (nombre, tamaño y fecha de modificación de cada archivo) y la compara en cada pedido. Así detecta archivos nuevos, borrados o reescritos dentro del mismo segundo. El resto del tiempo devuelve el archivo ya armado. Si un CSV no tiene las columnas `in1,focos,anomalia`, responde un error 500 que nombra el archivo, en lugar de tomarlo como un mes vacío.
+- `serie.php` arma un único `cache/serie.json` con todos los departamentos y meses (`{ "months": [...], "data": { "06007": { "value": [...], "anomaly": [...] } }, "clim": {...} }`). Lo regenera solo cuando cambia la carpeta `datos/` o `config.json`: guarda junto al caché una huella de la configuración y de los CSV (nombre, tamaño y fecha de modificación de cada archivo) y la compara en cada pedido. Así detecta archivos nuevos, borrados o reescritos dentro del mismo segundo. El resto del tiempo devuelve el archivo ya armado. Si un CSV no tiene las columnas configuradas (por defecto `in1,focos,anomalia`), responde un error 500 que nombra el archivo, en lugar de tomarlo como un mes vacío.
 - **Tampoco recibe parámetros:** devuelve la serie completa y el navegador la carga una sola vez. Si el tamaño lo exige, se puede filtrar por departamento con `serie.php?in1=XXXXX`, validando el parámetro con `^\d{5}$` antes de usarlo.
 
 ### Funcionalidades del visor

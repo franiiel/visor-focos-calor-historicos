@@ -63,34 +63,34 @@ test('classIndex counts breaks strictly below the value', () => {
 });
 
 test('anomaly scale maps zero to the neutral middle colour', () => {
-  const scale = buildScale('anomalia', [-20, -5, 0, 5, 20]);
+  const scale = buildScale('anomaly', [-20, -5, 0, 5, 20]);
   assert.equal(scale.colors.length, scale.breaks.length + 1);
   assert.equal(colorFor(0, scale), scale.colors[3]);
   assert.notEqual(colorFor(-20, scale), colorFor(20, scale));
 });
 
 test('count scale gives zero its own class', () => {
-  const scale = buildScale('focos', [0, 1, 4, 30, 200]);
+  const scale = buildScale('value', [0, 1, 4, 30, 200]);
   assert.equal(colorFor(0, scale), scale.colors[0]);
   assert.notEqual(colorFor(1, scale), scale.colors[0]);
   assert.equal(scale.colors.length, scale.breaks.length + 1);
 });
 
 test('missing values use the missing colour', () => {
-  const scale = buildScale('focos', [0, 3]);
+  const scale = buildScale('value', [0, 3]);
   assert.equal(colorFor(null, scale), MISSING_COLOR);
   assert.equal(colorFor(undefined, scale), MISSING_COLOR);
   assert.equal(colorFor(NaN, scale), MISSING_COLOR);
 });
 
 test('legendItems has one item per class plus sin dato, with Spanish labels', () => {
-  const scale = buildScale('anomalia', [-20, 0, 20]);
+  const scale = buildScale('anomaly', [-20, 0, 20]);
   const items = legendItems(scale);
   assert.equal(items.length, scale.colors.length + 1);
   assert.equal(items.at(-1).label, 'Sin dato');
   assert.equal(items.at(-1).color, MISSING_COLOR);
   assert.ok(items.some((i) => /normal/i.test(i.label)));
-  const counts = legendItems(buildScale('focos', [0, 5, 50]));
+  const counts = legendItems(buildScale('value', [0, 5, 50]));
   assert.equal(counts[0].label, '0');
 });
 

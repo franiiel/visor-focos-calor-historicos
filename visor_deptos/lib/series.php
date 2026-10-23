@@ -1,16 +1,14 @@
 <?php
-// Consolidates the monthly CSVs (datos/focos_AAAAMM.csv) into one series object
-// and caches it as JSON. PHP 7.4+ compatible, no dependencies.
+// Consolidates the monthly CSVs (datos/<filePrefix>_AAAAMM.csv) into one series object
+// and caches it as JSON. $config is the array returned by visor_config() (lib/config.php).
+// PHP 7.4+ compatible, no dependencies.
 //
 // Consolidated shape (all arrays aligned to "months"):
 // {
 //   "months": ["200101", ...],
-//   "data":   { "06007": { "focos": [int|null, ...], "anomalia": [float|null, ...] } },
-//   "clim":   { "06007": [12 means of focos over 2001-2020, null if no data] }
+//   "data":   { "06007": { "value": [number|null, ...], "anomaly": [float|null, ...] } },
+//   "clim":   { "06007": [12 means of value over the climatology period, null if no data] }
 // }
-
-const SERIES_CLIM_FROM = '200101';
-const SERIES_CLIM_TO = '202012';
 
 /** A monthly CSV that cannot be used. $csvName is the base name only (no directory). */
 class SeriesCsvException extends RuntimeException
@@ -24,12 +22,12 @@ class SeriesCsvException extends RuntimeException
     }
 }
 
-/** Returns [AAAAMM => path], sorted by month. */
-function series_list_csv($dataDir)
+/** Returns [AAAAMM => path], sorted by month. $prefix is validated by visor_config(). */
+function series_list_csv($dataDir, $prefix)
 {
     $files = [];
-    foreach (glob($dataDir . '/focos_*.csv') ?: [] as $path) {
-        if (preg_match('/focos_(\d{6})\.csv\z/', $path, $m)) {
+    foreach (glob($dataDir . '/' . $prefix . '_*.csv') ?: [] as $path) {
+        if (preg_match('/^' . preg_quote($prefix, '/') . '_(\d{6})\.csv\z/', basename($path), $m)) {
             $files[$m[1]] = $path;
         }
     }
@@ -48,15 +46,18 @@ function series_number($text, $asInt)
 }
 
 /**
- * Parses one monthly CSV into [in1 => [focos, anomalia]].
+ * Parses one monthly CSV into [in1 => [value, anomaly]], reading the configured columns.
  * Throws SeriesCsvException (naming only the file, not its directory) when the file
  * cannot be read or lacks a required column, so a broken export is never cached
  * as an empty month.
  */
-function series_parse_csv($path)
+function series_parse_csv($path, $config)
 {
     $rows = [];
     $name = basename($path);
+    $valueCol = $config['columns']['value'];
+    $anomalyCol = $config['columns']['anomaly'];
+    $expected = "in1,$valueCol,$anomalyCol";
     $fh = @fopen($path, 'r');
     if ($fh === false) {
         throw new SeriesCsvException($name, "Cannot read $name");
@@ -64,18 +65,18 @@ function series_parse_csv($path)
     $header = fgetcsv($fh, 0, ",", "\"", "");
     if (!is_array($header)) {
         fclose($fh);
-        throw new SeriesCsvException($name, "$name has no header (expected in1,focos,anomalia)");
+        throw new SeriesCsvException($name, "$name has no header (expected $expected)");
     }
     $header = array_map(function ($h) {
         // Strip a UTF-8 BOM and spaces, compare case-insensitively.
         return strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $h)));
     }, $header);
     $iIn1 = array_search('in1', $header, true);
-    $iFocos = array_search('focos', $header, true);
-    $iAnom = array_search('anomalia', $header, true);
-    if ($iIn1 === false || $iFocos === false || $iAnom === false) {
+    $iValue = array_search($valueCol, $header, true);
+    $iAnom = array_search($anomalyCol, $header, true);
+    if ($iIn1 === false || $iValue === false || $iAnom === false) {
         fclose($fh);
-        throw new SeriesCsvException($name, "$name is missing a required column (expected in1,focos,anomalia)");
+        throw new SeriesCsvException($name, "$name is missing a required column (expected $expected)");
     }
     while (($cells = fgetcsv($fh, 0, ",", "\"", "")) !== false) {
         $in1 = trim((string) ($cells[$iIn1] ?? ''));
@@ -83,7 +84,7 @@ function series_parse_csv($path)
             continue;
         }
         $rows[$in1] = [
-            series_number($cells[$iFocos] ?? '', true),
+            series_number($cells[$iValue] ?? '', $config['integerValues']),
             series_number($cells[$iAnom] ?? '', false),
         ];
     }
@@ -92,9 +93,11 @@ function series_parse_csv($path)
 }
 
 /** Builds the consolidated series array from every CSV in $dataDir. */
-function series_build($dataDir)
+function series_build($dataDir, $config)
 {
-    $files = series_list_csv($dataDir);
+    $files = series_list_csv($dataDir, $config['filePrefix']);
+    $climFrom = $config['climatology']['from'];
+    $climTo = $config['climatology']['to'];
     $months = array_keys($files);
     // Month keys are 6-digit strings; PHP turns them into int array keys, so cast back.
     $months = array_map('strval', $months);
@@ -103,7 +106,7 @@ function series_build($dataDir)
     $perMonth = [];
     $codes = [];
     foreach ($files as $path) {
-        $rows = series_parse_csv($path);
+        $rows = series_parse_csv($path, $config);
         $perMonth[] = $rows;
         foreach ($rows as $in1 => $_) {
             $codes[(string) $in1] = true;
@@ -118,7 +121,7 @@ function series_build($dataDir)
     $data = new stdClass();
     $clim = new stdClass();
     foreach ($codeList as $in1) {
-        $focos = array_fill(0, $n, null);
+        $values = array_fill(0, $n, null);
         $anom = array_fill(0, $n, null);
         $sum = array_fill(0, 12, 0);
         $cnt = array_fill(0, 12, 0);
@@ -126,13 +129,13 @@ function series_build($dataDir)
             if (!isset($perMonth[$i][$in1])) {
                 continue;
             }
-            list($f, $a) = $perMonth[$i][$in1];
-            $focos[$i] = $f;
+            list($v, $a) = $perMonth[$i][$in1];
+            $values[$i] = $v;
             $anom[$i] = $a;
             $month = $months[$i];
-            if ($f !== null && $month >= SERIES_CLIM_FROM && $month <= SERIES_CLIM_TO) {
+            if ($v !== null && $month >= $climFrom && $month <= $climTo) {
                 $cm = (int) substr($month, 4, 2) - 1;
-                $sum[$cm] += $f;
+                $sum[$cm] += $v;
                 $cnt[$cm]++;
             }
         }
@@ -141,27 +144,26 @@ function series_build($dataDir)
             $means[] = $cnt[$m] > 0 ? round($sum[$m] / $cnt[$m], 2) : null;
         }
         // stdClass properties keep "06007"-style keys as strings in json_encode.
-        $data->{$in1} = ['focos' => $focos, 'anomalia' => $anom];
+        $data->{$in1} = ['value' => $values, 'anomaly' => $anom];
         $clim->{$in1} = $means;
     }
     return ['months' => $months, 'data' => $data, 'clim' => $clim];
 }
 
 /**
- * Fingerprint of the data directory: sha1 over the sorted "name:size:mtime" of every
- * monthly CSV. Unlike a plain mtime comparison (1-second resolution), it also changes
+ * Fingerprint of the config and the data directory: sha1 over the config and the sorted
+ * "name:size:mtime" of every monthly CSV, so editing config.json also rebuilds. Unlike a plain mtime comparison (1-second resolution), it also changes
  * when a file is rewritten within the same second with a different size, or when a
  * file is added or removed (including files copied with an old preserved mtime).
  */
-function series_data_fingerprint($dataDir)
+function series_data_fingerprint($dataDir, $config)
 {
     clearstatcache();
-    $parts = [];
-    foreach (series_list_csv($dataDir) as $path) {
+    $parts = [json_encode($config)];
+    foreach (series_list_csv($dataDir, $config['filePrefix']) as $path) {
         $parts[] = basename($path) . ':' . (int) @filesize($path) . ':' . (int) @filemtime($path);
     }
-    return sha1(implode("
-", $parts));
+    return sha1(implode("\n", $parts));
 }
 
 /**
@@ -171,13 +173,12 @@ function series_data_fingerprint($dataDir)
  * CSVs are read, so a file changed during a build makes the next request rebuild.
  * If the cache cannot be written, the freshly built JSON is still returned.
  */
-function series_cached_json($dataDir, $cacheFile)
+function series_cached_json($dataDir, $cacheFile, $config)
 {
-    $fingerprint = series_data_fingerprint($dataDir);
+    $fingerprint = series_data_fingerprint($dataDir, $config);
     if (is_file($cacheFile)) {
         $raw = file_get_contents($cacheFile);
-        $nl = $raw === false ? false : strpos($raw, "
-");
+        $nl = $raw === false ? false : strpos($raw, "\n");
         if ($nl !== false && substr($raw, 0, $nl) === $fingerprint) {
             $json = substr($raw, $nl + 1);
             if ($json !== '') {
@@ -187,7 +188,7 @@ function series_cached_json($dataDir, $cacheFile)
     }
 
     // series_build throws on a broken CSV, so a partial result is never cached.
-    $json = json_encode(series_build($dataDir));
+    $json = json_encode(series_build($dataDir, $config));
     if ($json === false) {
         throw new RuntimeException('json_encode failed: ' . json_last_error_msg());
     }
@@ -199,8 +200,7 @@ function series_cached_json($dataDir, $cacheFile)
     }
     // tempnam silently falls back to the system temp dir, so check writability first.
     $tmp = is_writable($dir) ? @tempnam($dir, 'serie_') : false;
-    if ($tmp !== false && file_put_contents($tmp, $fingerprint . "
-" . $json) !== false) {
+    if ($tmp !== false && file_put_contents($tmp, $fingerprint . "\n" . $json) !== false) {
         @chmod($tmp, 0644);
         if (!@rename($tmp, $cacheFile)) {
             @unlink($tmp);

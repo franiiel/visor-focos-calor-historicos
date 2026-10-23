@@ -64,9 +64,9 @@ export function classIndex(value, breaks) {
   return i;
 }
 
-// kind: 'anomalia' (diverging) or 'focos' (sequential with a zero class).
+// kind: 'anomaly' (diverging) or 'value' (sequential with a zero class).
 export function buildScale(kind, values) {
-  if (kind === 'anomalia') {
+  if (kind === 'anomaly') {
     return { kind, breaks: anomalyBreaks(values), colors: ANOMALY_COLORS.slice() };
   }
   // For counts, breaks[0] separates 0 from the first positive class.
@@ -102,7 +102,7 @@ export function formatAnomaly(value) {
 export function legendItems(scale) {
   const { breaks, colors } = scale;
   const items = [];
-  if (scale.kind === 'anomalia') {
+  if (scale.kind === 'anomaly') {
     const f = (v) => formatAnomaly(v);
     const labels = [
       `Muchos menos (≤ ${f(breaks[0])})`,

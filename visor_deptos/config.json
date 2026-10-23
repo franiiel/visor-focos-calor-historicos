@@ -1,0 +1,12 @@
+{
+  "title": "Focos de calor por departamento",
+  "filePrefix": "focos",
+  "columns": { "value": "focos", "anomaly": "anomalia" },
+  "integerValues": true,
+  "unit": "focos",
+  "valueLabel": "Focos totales",
+  "valueTitle": "Focos de calor totales",
+  "anomalyTitle": "Anomalía de focos de calor",
+  "climatology": { "from": "200101", "to": "202012" },
+  "note": "Anomalía: diferencia entre los focos del mes y el promedio de focos del mismo mes en 2001–2020 (supuesto del prototipo; la definición final la establece SEPA)."
+}

@@ -14,23 +14,29 @@ function toNumber(text) {
   return Number.isFinite(n) ? n : null;
 }
 
-// Parses one monthly CSV (`in1,focos,anomalia`) into Map<in1, {focos, anomalia}>.
+// Parses one monthly CSV into Map<in1, {value, anomaly}>, reading the column names
+// given by config.json (`columns: {value, anomaly}`, lowercase).
 // in1 stays a string so the leading zero is preserved; rows with an invalid code
 // are skipped, and empty or non-numeric values become null ("sin dato").
-export function parseMonthCsv(text) {
+export function parseMonthCsv(text, columns) {
+  const expected = `in1,${columns.value},${columns.anomaly}`;
   const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim() !== '');
-  if (!lines.length) throw new Error('CSV vacío: falta el encabezado in1,focos,anomalia');
+  if (!lines.length) throw new Error(`CSV vacío: falta el encabezado ${expected}`);
   const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
-  const col = { in1: header.indexOf('in1'), focos: header.indexOf('focos'), anomalia: header.indexOf('anomalia') };
-  if (col.in1 < 0 || col.focos < 0 || col.anomalia < 0) {
-    throw new Error('Encabezado inválido: se esperaba in1,focos,anomalia');
+  const col = {
+    in1: header.indexOf('in1'),
+    value: header.indexOf(columns.value),
+    anomaly: header.indexOf(columns.anomaly),
+  };
+  if (col.in1 < 0 || col.value < 0 || col.anomaly < 0) {
+    throw new Error(`Encabezado inválido: se esperaba ${expected}`);
   }
   const rows = new Map();
   for (const line of lines.slice(1)) {
     const cells = line.split(',');
     const in1 = (cells[col.in1] ?? '').trim();
     if (!/^\d{5}$/.test(in1)) continue;
-    rows.set(in1, { focos: toNumber(cells[col.focos]), anomalia: toNumber(cells[col.anomalia]) });
+    rows.set(in1, { value: toNumber(cells[col.value]), anomaly: toNumber(cells[col.anomaly]) });
   }
   return rows;
 }

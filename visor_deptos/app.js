@@ -1,21 +1,35 @@
-// Department heat-hotspot viewer (ES module). Leaflet (L) and Chart.js (Chart) are
-// loaded as pinned UMD scripts by index.php.
+// Department viewer (ES module) for the dataset described in config.json, which
+// index.php embeds as #visor-config. Leaflet (L) and Chart.js (Chart) are loaded as
+// pinned UMD scripts by index.php.
 import { buildScale, colorFor, legendItems, formatNumber, formatAnomaly } from './scales.js';
 import { parseMonthCsv, splitMonth, monthLabel, MONTH_NAMES, createLatestGuard } from './data.js';
 
 const L = globalThis.L;
 const Chart = globalThis.Chart;
 
-const LAYER_TITLES = {
-  anomalia: 'Anomalía de focos de calor',
-  focos: 'Focos de calor totales',
-};
+const $ = (id) => document.getElementById(id);
+
+function readConfig() {
+  try {
+    return JSON.parse($('visor-config').textContent);
+  } catch {
+    return null;
+  }
+}
+
+const config = readConfig();
+const VALUE_DECIMALS = config && config.integerValues ? 0 : 1;
+const UNIT = config ? config.unit : '';
+const UNIT_TITLE = UNIT.charAt(0).toUpperCase() + UNIT.slice(1);
+const CLIM_PERIOD = config
+  ? `${config.climatology.from.slice(0, 4)}–${config.climatology.to.slice(0, 4)}`
+  : '';
 
 const state = {
   months: [],
   month: null,
-  layer: 'anomalia',
-  monthCache: new Map(), // AAAAMM -> Map<in1, {focos, anomalia}>
+  layer: 'anomaly',
+  monthCache: new Map(), // AAAAMM -> Map<in1, {value, anomaly}>
   rows: new Map(),
   scale: null,
   selected: null, // { in1, depto, provincia }
@@ -28,7 +42,9 @@ const state = {
 const monthGuard = createLatestGuard();
 const seriesGuard = createLatestGuard();
 
-const $ = (id) => document.getElementById(id);
+function layerTitle() {
+  return state.layer === 'anomaly' ? config.anomalyTitle : config.valueTitle;
+}
 
 function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (c) => ({
@@ -103,16 +119,16 @@ function featureStyle(feature) {
 
 function formatValue(value) {
   if (value === null || value === undefined) return 'sin dato';
-  return state.layer === 'anomalia'
-    ? `${formatAnomaly(value)} focos respecto de lo normal`
-    : `${formatNumber(value)} focos`;
+  return state.layer === 'anomaly'
+    ? `${formatAnomaly(value)} ${UNIT} respecto de lo normal`
+    : `${formatNumber(value, VALUE_DECIMALS)} ${UNIT}`;
 }
 
 function tooltipHtml(props) {
   return (
     `<strong>${escapeHtml(props.depto)}</strong><br>` +
     `${escapeHtml(props.provincia)}<br>` +
-    `${escapeHtml(LAYER_TITLES[state.layer])}: ${escapeHtml(formatValue(valueFor(props.in1)))}`
+    `${escapeHtml(layerTitle())}: ${escapeHtml(formatValue(valueFor(props.in1)))}`
   );
 }
 
@@ -121,7 +137,7 @@ function renderLegend() {
   legend.replaceChildren();
   const title = document.createElement('div');
   title.className = 'visor-legend-title';
-  title.textContent = state.layer === 'anomalia' ? 'Anomalía (focos)' : 'Focos en el mes';
+  title.textContent = state.layer === 'anomaly' ? `Anomalía (${UNIT})` : `${UNIT_TITLE} en el mes`;
   legend.append(title);
   for (const item of legendItems(state.scale)) {
     const row = document.createElement('div');
@@ -141,7 +157,7 @@ function restyle() {
   state.scale = buildScale(state.layer, values);
   state.geoLayer.setStyle(featureStyle);
   renderLegend();
-  $('map-title').textContent = `${LAYER_TITLES[state.layer]} — ${monthLabel(state.month)}`;
+  $('map-title').textContent = `${layerTitle()} — ${monthLabel(state.month)}`;
 }
 
 // ---------- Month selection ----------
@@ -152,9 +168,9 @@ async function loadMonth(month) {
   let rows = state.monthCache.get(month);
   if (!rows) {
     try {
-      const res = await fetch(`datos/focos_${month}.csv`);
+      const res = await fetch(`datos/${config.filePrefix}_${month}.csv`);
       if (!res.ok) throw new Error(`No se pudo leer el archivo del mes ${month} (HTTP ${res.status})`);
-      rows = parseMonthCsv(await res.text());
+      rows = parseMonthCsv(await res.text(), config.columns);
     } catch (err) {
       // A failure of a superseded request is not reported: the newer one owns the UI.
       if (!monthGuard.isCurrent(token)) return;
@@ -245,7 +261,7 @@ function chartLabels(months) {
 
 function markerData(months) {
   const idx = months.indexOf(state.month);
-  return months.map((_, i) => (i === idx ? state.series.focos[i] : null));
+  return months.map((_, i) => (i === idx ? state.series.value[i] : null));
 }
 
 function updatePanelInfo() {
@@ -257,14 +273,14 @@ function updatePanelInfo() {
   }
   const clim = s.clim ? s.clim[splitMonth(state.month).month - 1] : null;
   $('panel-info').textContent =
-    `${monthLabel(state.month)}: ${formatNumber(s.focos[idx])} focos · ` +
-    `anomalía ${formatAnomaly(s.anomalia[idx])} · ` +
-    `promedio 2001–2020 del mes: ${formatNumber(clim, 1)}`;
+    `${monthLabel(state.month)}: ${formatNumber(s.value[idx], VALUE_DECIMALS)} ${UNIT} · ` +
+    `anomalía ${formatAnomaly(s.anomaly[idx])} · ` +
+    `promedio ${CLIM_PERIOD} del mes: ${formatNumber(clim, 1)}`;
 }
 
 function renderChart() {
   const s = state.series;
-  // Reference: the 2001-2020 mean of the same calendar month, repeated along the series.
+  // Reference: the climatology mean of the same calendar month, repeated along the series.
   const reference = s.months.map((m) => (s.clim ? s.clim[splitMonth(m).month - 1] : null));
   if (state.chart) state.chart.destroy();
   state.chart = new Chart($('chart'), {
@@ -273,8 +289,8 @@ function renderChart() {
       labels: chartLabels(s.months),
       datasets: [
         {
-          label: 'Focos en el mes',
-          data: s.focos,
+          label: `${UNIT_TITLE} en el mes`,
+          data: s.value,
           borderColor: '#cc4c02',
           backgroundColor: '#cc4c02',
           borderWidth: 1.5,
@@ -282,7 +298,7 @@ function renderChart() {
           spanGaps: false,
         },
         {
-          label: 'Promedio 2001–2020 del mismo mes',
+          label: `Promedio ${CLIM_PERIOD} del mismo mes`,
           data: reference,
           borderColor: '#555',
           borderDash: [4, 3],
@@ -307,14 +323,14 @@ function renderChart() {
       interaction: { mode: 'index', intersect: false },
       scales: {
         x: { ticks: { maxTicksLimit: 8, maxRotation: 0 }, grid: { display: false } },
-        y: { beginAtZero: true, title: { display: true, text: 'Focos' } },
+        y: { beginAtZero: true, title: { display: true, text: UNIT_TITLE } },
       },
       plugins: {
         legend: { position: 'bottom', labels: { boxWidth: 14 } },
         tooltip: {
           filter: (item) => item.raw !== null,
           callbacks: {
-            label: (item) => `${item.dataset.label}: ${formatNumber(item.raw, item.datasetIndex === 1 ? 1 : 0)}`,
+            label: (item) => `${item.dataset.label}: ${formatNumber(item.raw, item.datasetIndex === 1 ? 1 : VALUE_DECIMALS)}`,
           },
         },
       },
@@ -335,6 +351,10 @@ function updateChartMarker() {
 async function init() {
   if (!L || !Chart) {
     showError('No se pudieron cargar las librerías del mapa o del gráfico.');
+    return;
+  }
+  if (!config) {
+    showError('No se pudo leer la configuración del visor (config.json).');
     return;
   }
   let months;
