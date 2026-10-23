@@ -41,9 +41,10 @@ function visor_config($file)
     }
     $from = $config['climatology']['from'] ?? null;
     $to = $config['climatology']['to'] ?? null;
-    if (!is_string($from) || !is_string($to) || !preg_match('/^\d{6}\z/', $from)
-        || !preg_match('/^\d{6}\z/', $to) || $from > $to) {
-        throw new VisorConfigException("$name: \"climatology\" needs \"from\" <= \"to\" as AAAAMM strings");
+    $month = '/^\d{4}(0[1-9]|1[0-2])\z/';
+    if (!is_string($from) || !is_string($to) || !preg_match($month, $from)
+        || !preg_match($month, $to) || $from > $to) {
+        throw new VisorConfigException("$name: \"climatology\" needs \"from\" <= \"to\" as AAAAMM strings (MM 01-12)");
     }
     return $config;
 }

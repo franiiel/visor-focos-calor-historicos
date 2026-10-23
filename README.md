@@ -55,7 +55,7 @@ node --test "tools/test/*.test.mjs"
 php tools/test/series_test.php
 ```
 
-Las pruebas de Node cubren las escalas y el formato (`scales.js`), la lectura de CSV y el control de pedidos superpuestos (`data.js`) y el generador (determinismo y formato de los archivos). La prueba de PHP no usa frameworks: cubre `lib/series.php` (forma de la serie, prefijo y columnas configurados, huella de la carpeta `datos/` y de la configuración, reutilización del caché y error ante un CSV sin las columnas requeridas) y la validación de `config.json`, y termina con código 0 si todo pasa.
+Las pruebas de Node cubren las escalas y el formato (`scales.js`), la lectura de CSV y el control de pedidos superpuestos (`data.js`) y el generador (determinismo y formato de los archivos). La prueba de PHP no usa frameworks: cubre `lib/series.php` (forma de la serie, prefijo y columnas configurados, huella de la carpeta `datos/` y de la configuración, reutilización del caché y error ante un CSV sin las columnas requeridas), la validación de `config.json` y las respuestas de `listar.php` y `serie.php` (forma del JSON y códigos 400, 404 y 500), que corre como subprocesos sobre una copia temporal. Termina con código 0 si todo pasa.
 
 ## Servir el visor
 

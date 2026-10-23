@@ -104,7 +104,7 @@ El visor no está atado a los focos MODIS. Todo lo que depende del conjunto de d
 
 - `filePrefix` y `columns`: nombre de los CSV (`datos/<filePrefix>_AAAAMM.csv`) y de sus dos columnas numéricas. `in1` es siempre la clave de unión. Con los valores de arriba, el formato es el de "Formato de datos propuesto".
 - `integerValues`: `true` para conteos (se redondean a enteros); `false` para conservar decimales.
-- `climatology`: período del promedio de referencia del gráfico (AAAAMM, inclusive).
+- `climatology`: período del promedio de referencia del gráfico (AAAAMM, inclusive; el mes va de 01 a 12).
 - `title`, `unit`, `valueLabel`, `valueTitle`, `anomalyTitle` y `note`: textos de la página, la leyenda, el tooltip y el gráfico.
 
 Para mostrar otro conjunto con la misma forma (un valor mensual y su anomalía por departamento, por ejemplo focos VIIRS), se reemplazan los CSV de `datos/` y se edita `config.json`. El caché de `serie.php` se regenera solo, porque su huella incluye la configuración. Si `config.json` no es válido (por ejemplo, un prefijo con `/` o `..`), los tres puntos de entrada responden un error 500 que lo nombra.
@@ -132,7 +132,7 @@ El gráfico de un departamento necesita todos sus meses. Si el navegador tuviera
 
 - Los CSV mensuales en `datos/` siguen siendo el **contrato con el proceso de SEPA**: no cambia nada para quien los genera.
 - `serie.php` arma un único `cache/serie.json` con todos los departamentos y meses (`{ "months": [...], "data": { "06007": { "value": [...], "anomaly": [...] } }, "clim": {...} }`). Lo regenera solo cuando cambia la carpeta `datos/` o `config.json`: guarda junto al caché una huella de la configuración y de los CSV (nombre, tamaño y fecha de modificación de cada archivo) y la compara en cada pedido. Así detecta archivos nuevos, borrados o reescritos dentro del mismo segundo. El resto del tiempo devuelve el archivo ya armado. Si un CSV no tiene las columnas configuradas (por defecto `in1,focos,anomalia`), responde un error 500 que nombra el archivo, en lugar de tomarlo como un mes vacío.
-- **Tampoco recibe parámetros:** devuelve la serie completa y el navegador la carga una sola vez. Si el tamaño lo exige, se puede filtrar por departamento con `serie.php?in1=XXXXX`, validando el parámetro con `^\d{5}$` antes de usarlo.
+- **Tampoco recibe parámetros:** devuelve la serie completa y el navegador la carga una sola vez. Si el tamaño lo exige, se puede filtrar por departamento con `serie.php?in1=XXXXX`, validando el parámetro con `^\d{5}$` antes de usarlo. Esa respuesta es `{ "in1", "months", "value", "anomaly", "clim" }`: las claves son genéricas y no dependen del nombre de las columnas en `config.json`.
 
 ### Funcionalidades del visor
 

@@ -188,6 +188,8 @@ $invalid = [
     'non-boolean integerValues' => ['integerValues' => 'yes'],
     'bad climatology month' => ['climatology' => ['from' => '2001', 'to' => '202012']],
     'climatology from after to' => ['climatology' => ['from' => '202012', 'to' => '200101']],
+    'climatology month 13' => ['climatology' => ['from' => '200113', 'to' => '202012']],
+    'climatology month 00' => ['climatology' => ['from' => '200101', 'to' => '202000']],
 ];
 foreach ($invalid as $case => $change) {
     file_put_contents($file, is_string($change) ? $change : json_encode(array_replace($real, $change)));
@@ -199,6 +201,68 @@ foreach ($invalid as $case => $change) {
     }
     check("config: rejects $case", $thrown !== null && strpos($thrown->getMessage(), 'config.json') !== false
         && strpos($thrown->getMessage(), $root) === false);
+}
+remove_dir($root);
+
+// --- Endpoints ----------------------------------------------------------------
+// listar.php and serie.php run as subprocesses on a copy of the viewer with fixture
+// data; the CLI keeps the code set by http_response_code(), reported on stderr.
+
+/** Runs $script with $query as $_GET; returns [HTTP status, stdout]. */
+function run_endpoint($dir, $script, $query = '')
+{
+    $runner = $dir . '/run_endpoint.php';
+    file_put_contents($runner, '<?php
+parse_str($argv[2], $_GET);
+register_shutdown_function(function () {
+    fwrite(STDERR, "\nHTTP_STATUS=" . (http_response_code() ?: 200) . "\n");
+});
+require __DIR__ . "/" . $argv[1];
+');
+    $proc = proc_open([PHP_BINARY, $runner, $script, $query], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $out = stream_get_contents($pipes[1]);
+    $err = stream_get_contents($pipes[2]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    proc_close($proc);
+    return [preg_match('/HTTP_STATUS=(\d+)/', $err, $m) ? (int) $m[1] : 0, $out];
+}
+
+$viewer = __DIR__ . '/../../visor_deptos';
+$root = make_dir();
+mkdir($root . '/lib');
+foreach (['listar.php', 'serie.php', 'config.json', 'lib/config.php', 'lib/series.php'] as $file) {
+    copy("$viewer/$file", "$root/$file");
+}
+write_csv($root . '/datos', '200102', "in1,focos,anomalia\n06007,5,0\n");
+write_csv($root . '/datos', '200101', $csvA);
+write_csv($root . '/datos', '200103', $csvA, 'viirs');
+
+list($status, $out) = run_endpoint($root, 'listar.php');
+check('listar.php: 200', $status === 200);
+check('listar.php: sorted AAAAMM strings of the configured prefix', json_decode($out, true) === ['200101', '200102']);
+
+list($status, $out) = run_endpoint($root, 'serie.php', 'in1=06007');
+$one = json_decode($out, true);
+check('serie.php?in1: 200', $status === 200);
+check('serie.php?in1: keys in1, months, value, anomaly, clim',
+    is_array($one) && array_keys($one) === ['in1', 'months', 'value', 'anomaly', 'clim']);
+check('serie.php?in1: values', is_array($one) && $one['in1'] === '06007' && $one['value'] === [10, 5]
+    && $one['anomaly'] === [1.5, 0] && count($one['clim']) === 12);
+
+list($status, $out) = run_endpoint($root, 'serie.php');
+$all = json_decode($out, true);
+check('serie.php: 200 with keys months, data, clim', $status === 200 && is_array($all)
+    && array_keys($all) === ['months', 'data', 'clim'] && array_keys($all['data']['06007']) === ['value', 'anomaly']);
+
+check('serie.php?in1=abc: 400', run_endpoint($root, 'serie.php', 'in1=abc')[0] === 400);
+check('serie.php?in1=99999: 404', run_endpoint($root, 'serie.php', 'in1=99999')[0] === 404);
+
+file_put_contents($root . '/config.json', json_encode(array_replace($real, ['filePrefix' => '../x'])));
+foreach (['listar.php', 'serie.php'] as $script) {
+    list($status, $out) = run_endpoint($root, $script);
+    check("$script: invalid config is a 500 naming config.json",
+        $status === 500 && strpos((string) (json_decode($out, true)['error'] ?? ''), 'config.json') !== false);
 }
 remove_dir($root);
 
