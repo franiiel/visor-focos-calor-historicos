@@ -179,6 +179,15 @@ check('config.json: loads and matches the SEPA contract',
 
 $root = make_dir();
 $file = $root . '/config.json';
+$thrown = null;
+try {
+    visor_config($file);
+} catch (VisorConfigException $e) {
+    $thrown = $e;
+}
+check('config: rejects a missing file, naming only config.json', $thrown !== null
+    && strpos($thrown->getMessage(), 'config.json') !== false && strpos($thrown->getMessage(), $root) === false);
+
 file_put_contents($file, "\xEF\xBB\xBF" . json_encode($real));
 $withBom = null;
 try {

@@ -81,7 +81,7 @@ Los departamentos sin fila en un mes se muestran en gris como «sin dato».
 El visor puede mostrar otra serie mensual por departamento con la misma forma (un valor y su anomalía), por ejemplo focos VIIRS, sin tocar código:
 
 1. Dejar en `visor_deptos/datos/` los CSV nuevos, con el nombre `<prefijo>_AAAAMM.csv` y una columna `in1` (código INDEC de 5 dígitos).
-2. Editar `visor_deptos/config.json`: `filePrefix` (el prefijo), `columns.value` y `columns.anomaly` (nombres de las columnas, en minúsculas), `integerValues` (`true` para conteos), `climatology` (período del promedio de referencia) y los textos (`title`, `unit`, `valueLabel`, `valueTitle`, `anomalyTitle`, `note`).
+2. Editar `visor_deptos/config.json`: `filePrefix` (el prefijo), `columns.value` y `columns.anomaly` (nombres de las columnas, en minúsculas), `integerValues` (`true` para conteos), `climatology` (período del promedio de referencia) y los textos (`title`, `unit`, `valueLabel`, `valueTitle`, `anomalyTitle`, `note`). `note` es texto libre: si nombra el período de referencia o la unidad, actualizalo junto con `climatology` y `unit`, porque no se arma solo.
 3. Recargar la página. `serie.php` rearma el caché solo, porque su huella incluye la configuración.
 
 Si `config.json` no es válido, la página y los dos endpoints responden un error 500 que nombra `config.json`; el detalle queda en el log de PHP. La descripción completa está en `VISOR_FOCOS.md` («Configuración del conjunto de datos»).

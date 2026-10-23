@@ -105,7 +105,7 @@ El visor no está atado a los focos MODIS. Todo lo que depende del conjunto de d
 - `filePrefix` y `columns`: nombre de los CSV (`datos/<filePrefix>_AAAAMM.csv`) y de sus dos columnas numéricas. `in1` es siempre la clave de unión. Con los valores de arriba, el formato es el de "Formato de datos propuesto".
 - `integerValues`: `true` para conteos (se redondean a enteros); `false` para conservar decimales.
 - `climatology`: período del promedio de referencia del gráfico (AAAAMM, inclusive; el mes va de 01 a 12).
-- `title`, `unit`, `valueLabel`, `valueTitle`, `anomalyTitle` y `note`: textos de la página, la leyenda, el tooltip y el gráfico.
+- `title`, `unit`, `valueLabel`, `valueTitle`, `anomalyTitle` y `note`: textos de la página, la leyenda, el tooltip y el gráfico. Las etiquetas del gráfico y del panel toman el período de `climatology`, pero `note` es texto libre: si menciona el período o la unidad, se actualiza a mano junto con `climatology` y `unit`.
 
 Para mostrar otro conjunto con la misma forma (un valor mensual y su anomalía por departamento, por ejemplo focos VIIRS), se reemplazan los CSV de `datos/` y se edita `config.json`. El caché de `serie.php` se regenera solo, porque su huella incluye la configuración. Si `config.json` falta o no es válido (por ejemplo, un prefijo con `/` o `..`), los tres puntos de entrada responden un error 500 que lo nombra: no hay valores por defecto ocultos en el código, así que `config.json` se sube siempre junto con el resto de los archivos. Se acepta guardado con o sin BOM UTF-8.
 
