@@ -100,8 +100,8 @@ El visor necesita saber qué meses hay. `listar.php` **no recibe ningún paráme
 <?php
 header('Content-Type: application/json');
 $meses = [];
-foreach (glob(__DIR__ . '/datos/focos_*.csv') as $f) {
-    if (preg_match('/focos_(\d{6})\.csv$/', $f, $m)) $meses[] = $m[1];
+foreach (glob(__DIR__ . '/datos/focos_*.csv') ?: [] as $f) {
+    if (preg_match('/focos_(\d{6})\.csv\z/', $f, $m)) $meses[] = $m[1];
 }
 sort($meses);
 echo json_encode($meses);
@@ -112,7 +112,7 @@ echo json_encode($meses);
 El gráfico de un departamento necesita todos sus meses. Si el navegador tuviera que leer un CSV por mes, para dibujar **un solo gráfico** bajaría unos 300 archivos (2001–2026). Por eso:
 
 - Los CSV mensuales en `datos/` siguen siendo el **contrato con el proceso de SEPA**: no cambia nada para quien los genera.
-- `serie.php` arma un único `cache/serie.json` con todos los departamentos y meses (`{ "06007": { "200101": [focos, anomalia], … }, … }`). Lo regenera solo cuando algún CSV es más nuevo que el caché (comparando `filemtime`). El resto del tiempo devuelve el archivo ya armado.
+- `serie.php` arma un único `cache/serie.json` con todos los departamentos y meses (`{ "06007": { "200101": [focos, anomalia], … }, … }`). Lo regenera solo cuando cambia la carpeta `datos/`: guarda junto al caché una huella de los CSV (nombre, tamaño y fecha de modificación de cada archivo) y la compara en cada pedido. Así detecta archivos nuevos, borrados o reescritos dentro del mismo segundo. El resto del tiempo devuelve el archivo ya armado. Si un CSV no tiene las columnas `in1,focos,anomalia`, responde un error 500 que nombra el archivo, en lugar de tomarlo como un mes vacío.
 - **Tampoco recibe parámetros:** devuelve la serie completa y el navegador la carga una sola vez. Si el tamaño lo exige, se puede filtrar por departamento con `serie.php?in1=XXXXX`, validando el parámetro con `^\d{5}$` antes de usarlo.
 
 ### Funcionalidades del visor
