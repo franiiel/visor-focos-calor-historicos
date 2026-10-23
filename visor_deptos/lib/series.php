@@ -23,16 +23,22 @@ class SeriesCsvException extends RuntimeException
     }
 }
 
-/** Returns [AAAAMM => path], sorted by month. $prefix is validated by visor_config(). */
+/**
+ * Returns [[AAAAMM, path], ...] sorted by month, with the month as a string. Pairs
+ * instead of AAAAMM keys because PHP turns numeric string keys into ints.
+ * $prefix is validated by visor_config().
+ */
 function series_list_csv($dataDir, $prefix)
 {
     $files = [];
     foreach (glob($dataDir . '/' . $prefix . '_*.csv') ?: [] as $path) {
         if (preg_match('/^' . preg_quote($prefix, '/') . '_(\d{6})\.csv\z/', basename($path), $m)) {
-            $files[$m[1]] = $path;
+            $files[] = [$m[1], $path];
         }
     }
-    ksort($files, SORT_STRING);
+    usort($files, function ($a, $b) {
+        return strcmp($a[0], $b[0]);
+    });
     return $files;
 }
 
@@ -99,14 +105,12 @@ function series_build($dataDir, $config)
     $files = series_list_csv($dataDir, $config['filePrefix']);
     $climFrom = $config['climatology']['from'];
     $climTo = $config['climatology']['to'];
-    $months = array_keys($files);
-    // Month keys are 6-digit strings; PHP turns them into int array keys, so cast back.
-    $months = array_map('strval', $months);
+    $months = array_column($files, 0);
     $n = count($months);
 
     $perMonth = [];
     $codes = [];
-    foreach ($files as $path) {
+    foreach (array_column($files, 1) as $path) {
         $rows = series_parse_csv($path, $config);
         $perMonth[] = $rows;
         foreach ($rows as $in1 => $_) {
@@ -163,7 +167,7 @@ function series_data_fingerprint($dataDir, $config)
 {
     clearstatcache();
     $parts = [json_encode($config)];
-    foreach (series_list_csv($dataDir, $config['filePrefix']) as $path) {
+    foreach (array_column(series_list_csv($dataDir, $config['filePrefix']), 1) as $path) {
         $parts[] = basename($path) . ':' . (int) @filesize($path) . ':' . (int) @filemtime($path);
     }
     return sha1(implode("\n", $parts));

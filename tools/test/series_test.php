@@ -91,6 +91,10 @@ check('config: only files with the configured prefix', $series['months'] === ['2
 check('config: configured columns, decimals kept', $series['data']->{'06007'}['value'] === [1.25, 2.5]);
 check('config: configured climatology period', $series['clim']->{'06007'}[0] === null && $series['clim']->{'06007'}[1] === 2.5);
 check('config: default prefix ignores other datasets', series_build($data, $cfg)['months'] === ['200103']);
+check('list: [month, path] pairs, months as strings, sorted', series_list_csv($data, 'viirs') === [
+    ['200101', "$data/viirs_200101.csv"],
+    ['200102', "$data/viirs_200102.csv"],
+]);
 $thrown = null;
 try {
     series_build($data, ['columns' => ['value' => 'x', 'anomaly' => 'y']] + $viirs);
