@@ -3,16 +3,18 @@ import assert from 'node:assert/strict';
 
 import {
   MISSING_COLOR,
+  ANOMALY_COLORS,
   niceCeil,
-  anomalyBreaks,
   countBreaks,
   classIndex,
   buildScale,
   colorFor,
   legendItems,
   formatNumber,
-  formatAnomaly,
+  anomalyLabel,
 } from '../../visor_deptos/scales.js';
+
+const LABELS = ['mínimo', 'debajo', 'normal', 'encima', 'máximo'];
 
 test('niceCeil rounds up to 1, 2, 2.5 or 5 times a power of ten', () => {
   assert.equal(niceCeil(0.7), 1);
@@ -22,22 +24,6 @@ test('niceCeil rounds up to 1, 2, 2.5 or 5 times a power of ten', () => {
   assert.equal(niceCeil(3), 5);
   assert.equal(niceCeil(7), 10);
   assert.equal(niceCeil(120), 200);
-});
-
-test('anomalyBreaks are symmetric around zero and ascending', () => {
-  const values = [-40, -12, -3, -0.5, 0, 0, 0.2, 4, 15, 30];
-  const breaks = anomalyBreaks(values);
-  assert.equal(breaks.length, 6);
-  for (let i = 0; i < breaks.length; i++) {
-    assert.equal(breaks[i], -breaks[breaks.length - 1 - i]);
-    if (i > 0) assert.ok(breaks[i] > breaks[i - 1]);
-  }
-  assert.ok(breaks[3] > 0);
-});
-
-test('anomalyBreaks has a minimum span when all values are zero', () => {
-  const breaks = anomalyBreaks([0, 0, 0]);
-  assert.ok(breaks.at(-1) >= 1);
 });
 
 test('countBreaks are ascending nice numbers starting above zero', () => {
@@ -62,11 +48,19 @@ test('classIndex counts breaks strictly below the value', () => {
   assert.equal(classIndex(99, breaks), 6);
 });
 
-test('anomaly scale maps zero to the neutral middle colour', () => {
-  const scale = buildScale('anomaly', [-20, -5, 0, 5, 20]);
-  assert.equal(scale.colors.length, scale.breaks.length + 1);
-  assert.equal(colorFor(0, scale), scale.colors[3]);
-  assert.notEqual(colorFor(-20, scale), colorFor(20, scale));
+test('anomaly scale has one fixed colour per class 1-5', () => {
+  // The values do not move the classes: the same scale for any month.
+  const scale = buildScale('anomaly', [1, 1, 2], LABELS);
+  assert.deepEqual(scale.colors, ANOMALY_COLORS);
+  assert.equal(ANOMALY_COLORS.length, 5);
+  for (let c = 1; c <= 5; c++) assert.equal(colorFor(c, scale), ANOMALY_COLORS[c - 1]);
+  for (const v of [0, 6, 2.5, -1, null, NaN]) assert.equal(colorFor(v, scale), MISSING_COLOR);
+});
+
+test('anomalyLabel gives the configured text of a class', () => {
+  assert.equal(anomalyLabel(1, LABELS), 'mínimo');
+  assert.equal(anomalyLabel(5, LABELS), 'máximo');
+  for (const v of [0, 6, 2.5, null, undefined]) assert.equal(anomalyLabel(v, LABELS), 'sin dato');
 });
 
 test('count scale gives zero its own class', () => {
@@ -83,15 +77,13 @@ test('missing values use the missing colour', () => {
   assert.equal(colorFor(NaN, scale), MISSING_COLOR);
 });
 
-test('legendItems has one item per class plus sin dato, with Spanish labels', () => {
-  const scale = buildScale('anomaly', [-20, 0, 20]);
-  const items = legendItems(scale);
-  assert.equal(items.length, scale.colors.length + 1);
-  assert.equal(items.at(-1).label, 'Sin dato');
-  assert.equal(items.at(-1).color, MISSING_COLOR);
-  assert.ok(items.some((i) => /normal/i.test(i.label)));
+test('legendItems has one item per class plus sin dato', () => {
+  const items = legendItems(buildScale('anomaly', [], LABELS));
+  assert.deepEqual(items.map((i) => i.label), [...LABELS, 'Sin dato']);
+  assert.deepEqual(items.map((i) => i.color), [...ANOMALY_COLORS, MISSING_COLOR]);
   const counts = legendItems(buildScale('value', [0, 5, 50]));
   assert.equal(counts[0].label, '0');
+  assert.equal(counts.at(-1).label, 'Sin dato');
 });
 
 test('formatNumber uses comma decimals and dot thousands', () => {
@@ -99,10 +91,4 @@ test('formatNumber uses comma decimals and dot thousands', () => {
   assert.equal(formatNumber(3.5, 1), '3,5');
   assert.equal(formatNumber(-1234.25, 1), '−1.234,3');
   assert.equal(formatNumber(0, 1), '0,0');
-});
-
-test('formatAnomaly adds an explicit sign', () => {
-  assert.equal(formatAnomaly(3.5), '+3,5');
-  assert.equal(formatAnomaly(-1.2), '−1,2');
-  assert.equal(formatAnomaly(0), '0,0');
 });

@@ -46,7 +46,17 @@ Escribe `visor_deptos/datos/focos_200101.csv` … `focos_202608.csv` (308 archiv
 
 Los CSV sintéticos **no se versionan** (están en `.gitignore`): se regeneran rápido y de forma determinista, y así no se confunden con datos reales.
 
-Supuesto del prototipo: `anomalia = focos − promedio de focos del mismo departamento y el mismo mes calendario en 2001–2020`. La definición final la establece SEPA.
+`anomalia` es la clase 1–5 de SEPA respecto del mismo mes en 2001–2025, calculada con la misma regla que el conversor (ver «Convertir la planilla de SEPA»).
+
+## Convertir la planilla de SEPA
+
+```sh
+node tools/convert_excel.mjs --xlsx ESTADISTICAS-DEPARTAMENTALES2026.xlsx
+```
+
+Lee las hojas `FCXMESXAÑO` (focos por año, provincia y departamento) y `ESTADISTICAS` (código de cada departamento) y escribe un `focos_AAAAMM.csv` por mes en `visor_deptos/datos/`. La unión por nombre se hace solo acá: los CSV salen con `in1`. La clase de anomalía (1 a 5) se calcula con la regla de SEPA contra el período `climatology` de `config.json`. Un departamento sin fila en un año no tiene fila ese mes; la media de referencia usa solo los años con dato, como la planilla. Opciones: `--config` y `--out`.
+
+Si un departamento aparece dos veces en el mismo año, o un nombre no está en `ESTADISTICAS`, el conversor se detiene y lo nombra. Usa solo la biblioteca estándar de Node.
 
 ## Pruebas
 
@@ -55,7 +65,7 @@ node --test "tools/test/*.test.mjs"
 php tools/test/series_test.php
 ```
 
-Las pruebas de Node cubren las escalas y el formato (`scales.js`), la lectura de CSV y el control de pedidos superpuestos (`data.js`) y el generador (determinismo y formato de los archivos). La prueba de PHP no usa frameworks: cubre `lib/series.php` (forma de la serie, prefijo y columnas configurados, huella de la carpeta `datos/` y de la configuración, reutilización del caché y error ante un CSV sin las columnas requeridas), la validación de `config.json` y las respuestas de `listar.php` y `serie.php` (forma del JSON y códigos 400, 404 y 500), que corre como subprocesos sobre una copia temporal. Termina con código 0 si todo pasa.
+Las pruebas de Node cubren las escalas y el formato (`scales.js`), la lectura de CSV y el control de pedidos superpuestos (`data.js`), el conversor (regla de clases, media sobre los años con dato, nombres desconocidos o repetidos y lectura de un `.xlsx` de prueba) y el generador (determinismo y formato de los archivos). La prueba de PHP no usa frameworks: cubre `lib/series.php` (forma de la serie, prefijo y columnas configurados, huella de la carpeta `datos/` y de la configuración, reutilización del caché y error ante un CSV sin las columnas requeridas), la validación de `config.json` y las respuestas de `listar.php` y `serie.php` (forma del JSON y códigos 400, 404 y 500), que corre como subprocesos sobre una copia temporal. Termina con código 0 si todo pasa.
 
 ## Servir el visor
 
@@ -69,8 +79,8 @@ y abrir <http://localhost:8000/>. Antes hay que generar los datos (ver arriba). 
 
 ## Reemplazar los datos sintéticos por los de SEPA
 
-1. Borrar los `focos_*.csv` sintéticos de `visor_deptos/datos/` y el aviso `LEEME.txt`.
-2. Copiar los CSV de SEPA con el mismo nombre (`focos_AAAAMM.csv`) y las columnas `in1,focos,anomalia`. `in1` es el código INDEC de 5 dígitos, con el cero inicial.
+1. Borrar los `focos_*.csv` sintéticos de `visor_deptos/datos/`.
+2. Generar los CSV desde la planilla (ver «Convertir la planilla de SEPA») o copiar los de SEPA con el mismo nombre (`focos_AAAAMM.csv`) y las columnas `in1,focos,anomalia`. `in1` es el código INDEC de 5 dígitos, con el cero inicial; `anomalia` es la clase 1 a 5.
 3. No hace falta tocar código: `listar.php` detecta los meses y `serie.php` rearma el caché cuando cambia algún CSV.
 4. Quitar el aviso de datos sintéticos de `index.php`.
 
@@ -78,10 +88,10 @@ Los departamentos sin fila en un mes se muestran en gris como «sin dato».
 
 ## Cambiar el conjunto de datos
 
-El visor puede mostrar otra serie mensual por departamento con la misma forma (un valor y su anomalía), por ejemplo focos VIIRS, sin tocar código:
+El visor puede mostrar otra serie mensual por departamento con la misma forma (un valor y su clase de anomalía 1 a 5), por ejemplo focos VIIRS, sin tocar código:
 
 1. Dejar en `visor_deptos/datos/` los CSV nuevos, con el nombre `<prefijo>_AAAAMM.csv` y una columna `in1` (código INDEC de 5 dígitos).
-2. Editar `visor_deptos/config.json`: `filePrefix` (el prefijo), `columns.value` y `columns.anomaly` (nombres de las columnas, en minúsculas), `integerValues` (`true` para conteos), `climatology` (período del promedio de referencia) y los textos (`title`, `unit`, `valueLabel`, `valueTitle`, `anomalyTitle`, `note`). `note` es texto libre: si nombra el período de referencia o la unidad, actualizalo junto con `climatology` y `unit`, porque no se arma solo.
+2. Editar `visor_deptos/config.json`: `filePrefix` (el prefijo), `columns.value` y `columns.anomaly` (nombres de las columnas, en minúsculas), `integerValues` (`true` para conteos), `climatology` (período de referencia), `anomalyClasses` (los 5 textos de las clases, de la 1 a la 5) y los textos (`title`, `unit`, `valueLabel`, `valueTitle`, `anomalyTitle`, `note`). `note` es texto libre: si nombra el período de referencia o la unidad, actualizalo junto con `climatology` y `unit`, porque no se arma solo.
 3. Recargar la página. `serie.php` rearma el caché solo, porque su huella incluye la configuración.
 
 Si `config.json` no es válido, la página y los dos endpoints responden un error 500 que nombra `config.json`; el detalle queda en el log de PHP. La descripción completa está en `VISOR_FOCOS.md` («Configuración del conjunto de datos»).

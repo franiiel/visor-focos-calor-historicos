@@ -1,7 +1,7 @@
 // Department viewer (ES module) for the dataset described in config.json, which
 // index.php embeds as #visor-config. Leaflet (L) and Chart.js (Chart) are loaded as
 // pinned UMD scripts by index.php.
-import { buildScale, colorFor, legendItems, formatNumber, formatAnomaly } from './scales.js';
+import { buildScale, colorFor, legendItems, formatNumber, anomalyLabel } from './scales.js';
 import { parseMonthCsv, splitMonth, monthLabel, MONTH_NAMES, createLatestGuard } from './data.js';
 
 const L = globalThis.L;
@@ -24,6 +24,7 @@ const config = readConfig();
 const VALUE_DECIMALS = config && config.integerValues ? 0 : 1;
 const UNIT = config ? config.unit : '';
 const UNIT_TITLE = UNIT.charAt(0).toUpperCase() + UNIT.slice(1);
+const CLASS_LABELS = config ? config.anomalyClasses : [];
 const CLIM_PERIOD = config
   ? `${config.climatology.from.slice(0, 4)}–${config.climatology.to.slice(0, 4)}`
   : '';
@@ -121,10 +122,9 @@ function featureStyle(feature) {
 }
 
 function formatValue(value) {
+  if (state.layer === 'anomaly') return anomalyLabel(value, CLASS_LABELS);
   if (value === null || value === undefined) return 'sin dato';
-  return state.layer === 'anomaly'
-    ? `${formatAnomaly(value)} ${UNIT} respecto de lo normal`
-    : `${formatNumber(value, VALUE_DECIMALS)} ${UNIT}`;
+  return `${formatNumber(value, VALUE_DECIMALS)} ${UNIT}`;
 }
 
 function tooltipHtml(props) {
@@ -140,7 +140,7 @@ function renderLegend() {
   legend.replaceChildren();
   const title = document.createElement('div');
   title.className = 'visor-legend-title';
-  title.textContent = state.layer === 'anomaly' ? `Anomalía (${UNIT})` : `${UNIT_TITLE} en el mes`;
+  title.textContent = state.layer === 'anomaly' ? `Anomalía (${CLIM_PERIOD})` : `${UNIT_TITLE} en el mes`;
   legend.append(title);
   for (const item of legendItems(state.scale)) {
     const row = document.createElement('div');
@@ -157,7 +157,7 @@ function renderLegend() {
 
 function restyle() {
   const values = [...state.rows.values()].map((r) => r[state.layer]);
-  state.scale = buildScale(state.layer, values);
+  state.scale = buildScale(state.layer, values, CLASS_LABELS);
   state.geoLayer.setStyle(featureStyle);
   renderLegend();
   $('map-title').textContent = `${layerTitle()} — ${monthLabel(state.month)}`;
@@ -277,7 +277,7 @@ function updatePanelInfo() {
   const clim = s.clim ? s.clim[splitMonth(state.month).month - 1] : null;
   $('panel-info').textContent =
     `${monthLabel(state.month)}: ${formatNumber(s.value[idx], VALUE_DECIMALS)} ${UNIT} · ` +
-    `anomalía ${formatAnomaly(s.anomaly[idx])} · ` +
+    `anomalía: ${anomalyLabel(s.anomaly[idx], CLASS_LABELS).toLowerCase()} · ` +
     `promedio ${CLIM_PERIOD} del mes: ${formatNumber(clim, 1)}`;
 }
 

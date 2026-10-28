@@ -3,10 +3,9 @@
 
 export const MISSING_COLOR = '#c8c8c8';
 
-// Diverging scale (7 classes): blue = fewer hotspots than normal, red = more.
-export const ANOMALY_COLORS = [
-  '#2166ac', '#67a9cf', '#d1e5f0', '#f7f7f7', '#fddbc7', '#ef8a62', '#b2182b',
-];
+// SEPA anomaly classes 1-5 (see VISOR_FOCOS.md): blue = fewer hotspots than normal,
+// neutral = normal, red = more; the ends are the historical minimum and maximum.
+export const ANOMALY_COLORS = ['#2166ac', '#92c5de', '#f7f7f7', '#f4a582', '#b2182b'];
 
 // Sequential scale: first colour is reserved for zero hotspots.
 export const COUNT_COLORS = [
@@ -34,16 +33,6 @@ function quantile(sorted, p) {
   return sorted[idx];
 }
 
-// Six thresholds symmetric around 0: [-m, -m/2, -n, n, m/2, m], where m is the
-// 95th percentile of |anomaly| rounded up to a nice number (at least 1) and n
-// bounds the "normal" band.
-export function anomalyBreaks(values) {
-  const abs = finite(values).map(Math.abs).sort((a, b) => a - b);
-  const m = Math.max(1, niceCeil(quantile(abs, 0.95)));
-  const n = m / 10;
-  return [-m, -m / 2, -n, n, m / 2, m];
-}
-
 // Up to six ascending thresholds for positive counts, from quantiles of the
 // non-zero values rounded to nice numbers. Zero has its own class.
 export function countBreaks(values) {
@@ -64,10 +53,11 @@ export function classIndex(value, breaks) {
   return i;
 }
 
-// kind: 'anomaly' (diverging) or 'value' (sequential with a zero class).
-export function buildScale(kind, values) {
+// kind: 'anomaly' (fixed classes 1-5, labelled by classLabels) or 'value'
+// (sequential with a zero class).
+export function buildScale(kind, values, classLabels = []) {
   if (kind === 'anomaly') {
-    return { kind, breaks: anomalyBreaks(values), colors: ANOMALY_COLORS.slice() };
+    return { kind, colors: ANOMALY_COLORS.slice(), labels: classLabels };
   }
   // For counts, breaks[0] separates 0 from the first positive class.
   const breaks = [0, ...countBreaks(values)];
@@ -78,9 +68,19 @@ function isMissing(value) {
   return value === null || value === undefined || !Number.isFinite(value);
 }
 
+// Index 0-4 of an anomaly class, or -1 for anything that is not a class 1-5.
+function anomalyIndex(value) {
+  return Number.isInteger(value) && value >= 1 && value <= 5 ? value - 1 : -1;
+}
+
 export function colorFor(value, scale) {
   if (isMissing(value)) return MISSING_COLOR;
+  if (scale.kind === 'anomaly') return scale.colors[anomalyIndex(value)] ?? MISSING_COLOR;
   return scale.colors[classIndex(value, scale.breaks)];
+}
+
+export function anomalyLabel(value, classLabels) {
+  return classLabels[anomalyIndex(value)] ?? 'sin dato';
 }
 
 export function formatNumber(value, decimals = 0) {
@@ -92,28 +92,12 @@ export function formatNumber(value, decimals = 0) {
   return sign + grouped + (frac ? `,${frac}` : '');
 }
 
-export function formatAnomaly(value) {
-  if (isMissing(value)) return 'sin dato';
-  const text = formatNumber(value, 1);
-  return value > 0 && text !== '0,0' ? `+${text}` : text;
-}
-
 // Legend entries from lowest to highest class, plus "Sin dato".
 export function legendItems(scale) {
   const { breaks, colors } = scale;
   const items = [];
   if (scale.kind === 'anomaly') {
-    const f = (v) => formatAnomaly(v);
-    const labels = [
-      `Muchos menos (≤ ${f(breaks[0])})`,
-      `Menos (${f(breaks[0])} a ${f(breaks[1])})`,
-      `Algo menos (${f(breaks[1])} a ${f(breaks[2])})`,
-      `Normal (${f(breaks[2])} a ${f(breaks[3])})`,
-      `Algo más (${f(breaks[3])} a ${f(breaks[4])})`,
-      `Más (${f(breaks[4])} a ${f(breaks[5])})`,
-      `Muchos más (> ${f(breaks[5])})`,
-    ];
-    labels.forEach((label, i) => items.push({ color: colors[i], label }));
+    scale.labels.forEach((label, i) => items.push({ color: colors[i], label }));
   } else {
     items.push({ color: colors[0], label: '0' });
     for (let i = 1; i < breaks.length; i++) {

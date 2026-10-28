@@ -104,7 +104,8 @@ export function anomalyClass(focos, { max, mean, min }) {
   return 1;
 }
 
-function stats(values) {
+// Reference statistics of the values present for one department and calendar month.
+export function referenceStats(values) {
   if (!values.length) return null;
   const sum = values.reduce((a, b) => a + b, 0);
   return { max: Math.max(...values), mean: sum / values.length, min: Math.min(...values) };
@@ -139,7 +140,7 @@ export function buildMonthlyRows(history, codes, climatology) {
     const byMonth = series.get(in1);
     const reference = Array.from({ length: 12 }, (_, i) => {
       const mm = String(i + 1).padStart(2, '0');
-      return stats([...byMonth].filter(([m]) => m.endsWith(mm) && m >= climatology.from && m <= climatology.to).map(([, v]) => v));
+      return referenceStats([...byMonth].filter(([m]) => m.endsWith(mm) && m >= climatology.from && m <= climatology.to).map(([, v]) => v));
     });
     for (const [month, focos] of byMonth) {
       const ref = reference[Number(month.slice(4)) - 1];

@@ -106,7 +106,7 @@ in1,focos,anomalia
 
 El formato final lo define lo que el proceso de SEPA pueda exportar más fácil. Lo importante es que tenga el código INDEC y los números.
 
-**Serie histórica:** se genera **una sola vez** desde la planilla departamental con un script de `tools/`. El script lee `FCXMESXAÑO`, pasa de nombre a código con `ESTADISTICAS`, calcula la clase de cada mes con la regla de SEPA y escribe un CSV por mes con este formato. La unión por nombre queda dentro de esa conversión: los CSV salen con `in1` y el visor nunca une por nombre.
+**Serie histórica:** se genera **una sola vez** desde la planilla departamental con `tools/convert_excel.mjs`. El script lee `FCXMESXAÑO`, pasa de nombre a código con `ESTADISTICAS`, calcula la clase de cada mes con la regla de SEPA y escribe un CSV por mes con este formato. La unión por nombre queda dentro de esa conversión: los CSV salen con `in1` y el visor nunca une por nombre.
 
 ### Configuración del conjunto de datos
 

@@ -1,6 +1,6 @@
 <?php
 // Loads config.json, the single description of the dataset the viewer shows (CSV
-// prefix, columns, climatology period and UI texts). PHP 7.4+ compatible.
+// prefix, columns, climatology period, anomaly class labels and UI texts). PHP 7.4+ compatible.
 
 /** An unusable config.json. The message names the file only, never its directory. */
 class VisorConfigException extends RuntimeException
@@ -46,6 +46,12 @@ function visor_config($file)
     if (!is_string($from) || !is_string($to) || !preg_match($month, $from)
         || !preg_match($month, $to) || $from > $to) {
         throw new VisorConfigException("$name: \"climatology\" needs \"from\" <= \"to\" as AAAAMM strings (MM 01-12)");
+    }
+    $classes = $config['anomalyClasses'] ?? null;
+    // A JSON list: json_decode gives keys 0..4 only for an array, not for an object.
+    if (!is_array($classes) || array_keys($classes) !== [0, 1, 2, 3, 4]
+        || count(array_filter($classes, 'is_string')) !== 5) {
+        throw new VisorConfigException("$name: \"anomalyClasses\" must be a list of 5 strings (classes 1 to 5)");
     }
     return $config;
 }

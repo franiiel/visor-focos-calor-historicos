@@ -13,6 +13,7 @@ The PHP endpoints have been verified locally with PHP 8.3 (`listar.php`, `serie.
 ```sh
 node tools/build_geometry.mjs          # download + simplify geometry -> visor_deptos/deptos.geo.json (pinned mapshaper via npx)
 node tools/generate_synthetic.mjs      # synthetic CSVs -> visor_deptos/datos/ (deterministic, gitignored)
+node tools/convert_excel.mjs --xlsx ESTADISTICAS-DEPARTAMENTALES2026.xlsx  # SEPA workbook -> visor_deptos/datos/
 node --test "tools/test/*.test.mjs"    # unit tests (a bare directory argument does not work in Node 24)
 php tools/test/series_test.php         # PHP tests for lib/series.php (plain PHP, exit code 0/1)
 php -S localhost:8000 -t visor_deptos  # serve the viewer (needs PHP 7.4+)

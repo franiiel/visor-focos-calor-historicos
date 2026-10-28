@@ -180,6 +180,8 @@ remove_dir($root);
 $real = visor_config(__DIR__ . '/../../visor_deptos/config.json');
 check('config.json: loads and matches the SEPA contract',
     $real['filePrefix'] === 'focos' && $real['columns'] === ['value' => 'focos', 'anomaly' => 'anomalia']);
+check('config.json: five anomaly class labels and the 2001-2025 reference',
+    count($real['anomalyClasses'] ?? []) === 5 && $real['climatology'] === ['from' => '200101', 'to' => '202512']);
 
 $root = make_dir();
 $file = $root . '/config.json';
@@ -211,6 +213,10 @@ $invalid = [
     'climatology from after to' => ['climatology' => ['from' => '202012', 'to' => '200101']],
     'climatology month 13' => ['climatology' => ['from' => '200113', 'to' => '202012']],
     'climatology month 00' => ['climatology' => ['from' => '200101', 'to' => '202000']],
+    'missing anomalyClasses' => ['anomalyClasses' => null],
+    'four anomalyClasses' => ['anomalyClasses' => ['a', 'b', 'c', 'd']],
+    'non-string anomaly class' => ['anomalyClasses' => ['a', 'b', 'c', 'd', 5]],
+    'anomalyClasses as an object' => ['anomalyClasses' => ['1' => 'a', '2' => 'b', '3' => 'c', '4' => 'd', '5' => 'e']],
 ];
 foreach ($invalid as $case => $change) {
     file_put_contents($file, is_string($change) ? $change : json_encode(array_replace($real, $change)));

@@ -7,17 +7,18 @@
 //        [--out visor_deptos/datos] [--from 200101] [--to 202608] [--seed 20260908]
 //
 // Output contract (same as SEPA's real files): datos/focos_AAAAMM.csv with header
-// `in1,focos,anomalia`, one row per department.
-// Prototype assumption: anomalia = focos - mean(focos of the same department and
-// calendar month over 2001-2020), rounded to one decimal.
+// `in1,focos,anomalia`, one row per department. anomalia is SEPA's class 1-5 against
+// the same department and calendar month over 2001-2025, computed like the converter.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { anomalyClass, referenceStats } from './convert_excel.mjs';
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const BASELINE_FROM = '200101';
-const BASELINE_TO = '202012';
+const BASELINE_TO = '202512';
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -163,20 +164,12 @@ export function generateSeries(departments, months, { seed = 20260908 } = {}) {
 }
 
 function anomalies(months, focos) {
-  const sum = new Array(12).fill(0);
-  const count = new Array(12).fill(0);
-  months.forEach((m, i) => {
-    if (m >= BASELINE_FROM && m <= BASELINE_TO) {
-      const cm = Number(m.slice(4)) - 1;
-      sum[cm] += focos[i];
-      count[cm] += 1;
-    }
-  });
+  const reference = Array.from({ length: 12 }, (_, cm) =>
+    referenceStats(focos.filter((_, i) => Number(months[i].slice(4)) - 1 === cm && months[i] >= BASELINE_FROM && months[i] <= BASELINE_TO)),
+  );
   return months.map((m, i) => {
-    const cm = Number(m.slice(4)) - 1;
-    const mean = count[cm] ? sum[cm] / count[cm] : 0;
-    // Round to one decimal; `+ 0` turns -0 into 0.
-    return Math.round((focos[i] - mean) * 10) / 10 + 0;
+    const ref = reference[Number(m.slice(4)) - 1];
+    return ref ? anomalyClass(focos[i], ref) : null;
   });
 }
 
@@ -184,25 +177,10 @@ export function monthCsv(monthIndex, departments, series) {
   const lines = ['in1,focos,anomalia'];
   for (const dep of departments) {
     const s = series[dep.in1];
-    lines.push(`${dep.in1},${s.focos[monthIndex]},${s.anomalia[monthIndex].toFixed(1)}`);
+    lines.push(`${dep.in1},${s.focos[monthIndex]},${s.anomalia[monthIndex] ?? ''}`);
   }
   return lines.join('\n') + '\n';
 }
-
-const README = `DATOS SINTETICOS DE PRUEBA
-
-Los archivos focos_AAAAMM.csv de esta carpeta fueron generados por
-tools/generate_synthetic.mjs para el prototipo del visor. Son datos inventados
-con una forma plausible (estacionalidad y diferencias regionales) y NO
-representan focos de calor reales.
-
-Formato: in1,focos,anomalia (una fila por departamento).
-Supuesto del prototipo: anomalia = focos - promedio de focos del mismo
-departamento y el mismo mes calendario en 2001-2020.
-
-Para usar datos reales, reemplazar estos archivos por los CSV de SEPA con el
-mismo nombre y formato. No hace falta cambiar codigo.
-`;
 
 export function writeDataset({ departments, from, to, seed, outDir }) {
   const months = listMonths(from, to);
@@ -211,7 +189,6 @@ export function writeDataset({ departments, from, to, seed, outDir }) {
   months.forEach((m, i) => {
     writeFileSync(join(outDir, `focos_${m}.csv`), monthCsv(i, departments, series));
   });
-  writeFileSync(join(outDir, 'LEEME.txt'), README);
   return months.length;
 }
 
