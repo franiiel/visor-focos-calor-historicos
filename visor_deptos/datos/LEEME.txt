@@ -11,4 +11,4 @@ Origen de los archivos:
 - Datos de SEPA: tools/convert_excel.mjs a partir de la planilla
   ESTADISTICAS-DEPARTAMENTALES, o el CSV del mes que deja SEPA.
 - Datos de prueba: tools/generate_synthetic.mjs (inventados, NO son focos
-  reales; el visor muestra un aviso mientras se usen).
+  reales; solo para pruebas locales, el visor no los distingue).

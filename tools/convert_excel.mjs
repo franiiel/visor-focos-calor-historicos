@@ -112,28 +112,40 @@ export function referenceStats(values) {
 }
 
 // history: [{ year, prov, depto, values: [12 × number|null] }]; codes: Map<"PROV|DEPTO", in1>.
-// Returns Map<AAAAMM, [[in1, focos, class|null], ...]> sorted by month and in1. A
-// department without a row (or an empty cell) has no row that month, and the reference
-// statistics use only the years that have a value, as the workbook does.
+// Returns { byMonth: Map<AAAAMM, [[in1, focos, class|null], ...]> sorted by month and
+// in1, skipped: ["in1 PROV / DEPTO year (n rows)", ...] }. A department without a row
+// (or an empty cell) has no row that month, and the reference statistics use only the
+// years that have a value, as the workbook does. A department with more than one row
+// for a year is ambiguous (the workbook has rows with a mistyped year), so that year
+// is left without data and reported instead of guessing which row is right.
 export function buildMonthlyRows(history, codes, climatology) {
-  const series = new Map(); // in1 -> Map<AAAAMM, focos>
+  const rowsByYear = new Map(); // "in1|year" -> rows
   const unknown = new Set();
-  for (const { year, prov, depto, values } of history) {
-    const in1 = codes.get(`${prov}|${depto}`);
+  for (const row of history) {
+    const in1 = codes.get(`${row.prov}|${row.depto}`);
     if (!in1) {
-      unknown.add(`${prov} / ${depto}`);
+      unknown.add(`${row.prov} / ${row.depto}`);
+      continue;
+    }
+    const key = `${in1}|${row.year}`;
+    rowsByYear.set(key, [...(rowsByYear.get(key) ?? []), row]);
+  }
+  if (unknown.size) throw new Error(`Departments without a code in ${CODES_SHEET}: ${[...unknown].join(', ')}`);
+
+  const series = new Map(); // in1 -> Map<AAAAMM, focos>
+  const skipped = [];
+  for (const [key, rows] of rowsByYear) {
+    const in1 = key.split('|')[0];
+    const { year, prov, depto, values } = rows[0];
+    if (rows.length > 1) {
+      skipped.push(`${in1} ${prov} / ${depto} ${year} (${rows.length} rows)`);
       continue;
     }
     if (!series.has(in1)) series.set(in1, new Map());
-    const byMonth = series.get(in1);
     values.forEach((v, i) => {
-      if (v === null) return;
-      const month = `${year}${String(i + 1).padStart(2, '0')}`;
-      if (byMonth.has(month)) throw new Error(`Department ${in1} has more than one row for ${year}`);
-      byMonth.set(month, v);
+      if (v !== null) series.get(in1).set(`${year}${String(i + 1).padStart(2, '0')}`, v);
     });
   }
-  if (unknown.size) throw new Error(`Departments without a code in ${CODES_SHEET}: ${[...unknown].join(', ')}`);
 
   const result = new Map();
   for (const in1 of [...series.keys()].sort()) {
@@ -148,7 +160,7 @@ export function buildMonthlyRows(history, codes, climatology) {
       result.get(month).push([in1, focos, ref ? anomalyClass(focos, ref) : null]);
     }
   }
-  return new Map([...result].sort(([a], [b]) => a.localeCompare(b)));
+  return { byMonth: new Map([...result].sort(([a], [b]) => a.localeCompare(b))), skipped: skipped.sort() };
 }
 
 // ---------- Workbook -> CSV files ----------
@@ -168,7 +180,7 @@ function count(text, where) {
   return n;
 }
 
-// Returns [{ name, content }] for every month in the workbook.
+// Returns { files: [{ name, content }] for every month, skipped } (see buildMonthlyRows).
 export function convertWorkbook(buf, config) {
   const sheets = readXlsxSheets(buf, [HISTORY_SHEET, CODES_SHEET]);
 
@@ -192,10 +204,12 @@ export function convertWorkbook(buf, config) {
     }));
 
   const header = `in1,${config.columns.value},${config.columns.anomaly}`;
-  return [...buildMonthlyRows(history, codes, config.climatology)].map(([month, rows]) => ({
+  const { byMonth, skipped } = buildMonthlyRows(history, codes, config.climatology);
+  const files = [...byMonth].map(([month, rows]) => ({
     name: `${config.filePrefix}_${month}.csv`,
     content: [header, ...rows.map(([in1, focos, cls]) => `${in1},${focos},${cls ?? ''}`)].join('\n') + '\n',
   }));
+  return { files, skipped };
 }
 
 function parseArgs(argv) {
@@ -219,11 +233,15 @@ function main() {
   const opts = parseArgs(process.argv.slice(2));
   // Strip a UTF-8 BOM, as lib/config.php does.
   const config = JSON.parse(readFileSync(resolve(opts.config), 'utf8').replace(/^﻿/, ''));
-  const files = convertWorkbook(readFileSync(resolve(opts.xlsx)), config);
+  const { files, skipped } = convertWorkbook(readFileSync(resolve(opts.xlsx)), config);
   const out = resolve(opts.out);
   mkdirSync(out, { recursive: true });
   for (const { name, content } of files) writeFileSync(join(out, name), content);
   console.log(`Wrote ${files.length} monthly CSVs (${files[0]?.name} … ${files.at(-1)?.name}) to ${out}`);
+  if (skipped.length) {
+    console.warn(`Warning: ${skipped.length} department-years have more than one row and were left without data:`);
+    for (const s of skipped) console.warn(`  ${s}`);
+  }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

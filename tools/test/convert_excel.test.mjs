@@ -36,7 +36,7 @@ test('buildMonthlyRows averages only the years with a row and skips missing rows
     { year: 2003, prov: 'BUENOS AIRES', depto: 'ALBERTI', values: months(9) }, // outside the reference
     { year: 2001, prov: 'CHACO', depto: 'ALMIRANTE BROWN', values: months(0, 1) },
   ];
-  const result = buildMonthlyRows(history, CODES, CONFIG.climatology);
+  const { byMonth: result } = buildMonthlyRows(history, CODES, CONFIG.climatology);
   // 2003-02 is empty in every row, so it is not a month of the dataset.
   assert.deepEqual([...result.keys()], ['200101', '200102', '200201', '200202', '200301']);
   // Alberti January: reference 2 and 4 (mean 3, max 4, min 2).
@@ -51,16 +51,28 @@ test('buildMonthlyRows averages only the years with a row and skips missing rows
 
 test('buildMonthlyRows leaves the class empty when the month has no reference years', () => {
   const history = [{ year: 2003, prov: 'BUENOS AIRES', depto: 'ALBERTI', values: months(3) }];
-  assert.deepEqual(buildMonthlyRows(history, CODES, CONFIG.climatology).get('200301'), [['06021', 3, null]]);
+  assert.deepEqual(buildMonthlyRows(history, CODES, CONFIG.climatology).byMonth.get('200301'), [['06021', 3, null]]);
 });
 
-test('buildMonthlyRows rejects unknown names and repeated department-years', () => {
+test('buildMonthlyRows rejects unknown names', () => {
   assert.throws(
     () => buildMonthlyRows([{ year: 2001, prov: 'CHACO', depto: 'NOPE', values: months(1) }], CODES, CONFIG.climatology),
     /CHACO \/ NOPE/,
   );
-  const row = { year: 2001, prov: 'CHACO', depto: 'ALMIRANTE BROWN', values: months(1) };
-  assert.throws(() => buildMonthlyRows([row, row], CODES, CONFIG.climatology), /22007.*2001/);
+});
+
+test('buildMonthlyRows leaves a repeated department-year without data and reports it', () => {
+  const history = [
+    { year: 2001, prov: 'CHACO', depto: 'ALMIRANTE BROWN', values: months(1) },
+    { year: 2001, prov: 'CHACO', depto: 'ALMIRANTE BROWN', values: months(7) },
+    { year: 2002, prov: 'CHACO', depto: 'ALMIRANTE BROWN', values: months(2) },
+    { year: 2001, prov: 'BUENOS AIRES', depto: 'ALBERTI', values: months(3) },
+  ];
+  const { byMonth, skipped } = buildMonthlyRows(history, CODES, CONFIG.climatology);
+  assert.deepEqual(skipped, ['22007 CHACO / ALMIRANTE BROWN 2001 (2 rows)']);
+  // Neither repeated row is used, not even as reference: 2002 is its only year.
+  assert.deepEqual(byMonth.get('200101'), [['06021', 3, 3]]);
+  assert.deepEqual(byMonth.get('200201'), [['22007', 2, 3]]);
 });
 
 // Minimal .xlsx writer for fixtures: a zip with deflated entries (CRC is not checked).
@@ -140,14 +152,15 @@ test('readXlsxSheets resolves sheets by name and decodes shared strings', () => 
 });
 
 test('convertWorkbook writes one CSV per month with the configured names', () => {
-  const files = convertWorkbook(fixtureWorkbook(), CONFIG);
+  const { files, skipped } = convertWorkbook(fixtureWorkbook(), CONFIG);
+  assert.deepEqual(skipped, []);
   assert.deepEqual(files, [
     // January reference 3 and 5: 3 is the minimum (class 1), 5 is above mean + 10 % (class 4).
     { name: 'focos_200101.csv', content: 'in1,focos,anomalia\n06007,3,1\n' },
     { name: 'focos_200102.csv', content: 'in1,focos,anomalia\n06007,1,3\n' },
     { name: 'focos_200201.csv', content: 'in1,focos,anomalia\n06007,5,4\n' },
   ]);
-  const custom = convertWorkbook(fixtureWorkbook(), { ...CONFIG, filePrefix: 'viirs', columns: { value: 'n', anomaly: 'clase' } });
+  const custom = convertWorkbook(fixtureWorkbook(), { ...CONFIG, filePrefix: 'viirs', columns: { value: 'n', anomaly: 'clase' } }).files;
   assert.equal(custom[0].name, 'viirs_200101.csv');
   assert.equal(custom[0].content, 'in1,n,clase\n06007,3,1\n');
 });

@@ -6,8 +6,6 @@
   --visor-border: #d6d6d6;
   --visor-surface: #fff;
   --visor-accent: #8c2d04;
-  --visor-warning-bg: #fff4ce;
-  --visor-warning-border: #e0b400;
 }
 
 body {
@@ -33,14 +31,6 @@ body {
   box-sizing: border-box;
 }
 
-.visor-banner {
-  background: var(--visor-warning-bg);
-  border: 1px solid var(--visor-warning-border);
-  border-radius: 4px;
-  padding: 0.5rem 0.75rem;
-  font-weight: 600;
-  margin-bottom: 0.75rem;
-}
 
 .visor-title { font-size: 1.4rem; margin: 0.25rem 0; }
 .visor-subtitle { margin: 0 0 0.75rem; color: var(--visor-muted); }

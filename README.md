@@ -2,7 +2,7 @@
 
 Mapa interactivo de focos de calor mensuales y su anomalía por departamento de Argentina. Es el prototipo local (fase 2) de la propuesta descrita en [`VISOR_FOCOS.md`](VISOR_FOCOS.md).
 
-> **Los datos de este prototipo son sintéticos.** Los genera `tools/generate_synthetic.mjs` con una forma plausible (estacionalidad y diferencias regionales), pero **no representan focos reales**. El visor lo indica con un aviso visible.
+Los datos son los de SEPA: los CSV mensuales se generan desde su planilla departamental con `tools/convert_excel.mjs` (ver «Convertir la planilla de SEPA»). No se versionan. Para probar sin la planilla hay un generador de datos sintéticos.
 
 ## Qué incluye
 
@@ -44,7 +44,7 @@ node tools/generate_synthetic.mjs
 
 Escribe `visor_deptos/datos/focos_200101.csv` … `focos_202608.csv` (308 archivos, unos 2,6 MB) en menos de un segundo. El resultado es siempre el mismo para la misma semilla (`--seed`, por defecto 20260908). Otras opciones: `--from 200101 --to 202608`.
 
-Los CSV sintéticos **no se versionan** (están en `.gitignore`): se regeneran rápido y de forma determinista, y así no se confunden con datos reales.
+Los CSV sintéticos **no se versionan** (están en `.gitignore`): se regeneran rápido y de forma determinista. Son datos inventados con una forma plausible, **no focos reales**, y el visor no los distingue de los de SEPA: usarlos solo para pruebas locales.
 
 `anomalia` es la clase 1–5 de SEPA respecto del mismo mes en 2001–2025, calculada con la misma regla que el conversor (ver «Convertir la planilla de SEPA»).
 
@@ -56,7 +56,7 @@ node tools/convert_excel.mjs --xlsx ESTADISTICAS-DEPARTAMENTALES2026.xlsx
 
 Lee las hojas `FCXMESXAÑO` (focos por año, provincia y departamento) y `ESTADISTICAS` (código de cada departamento) y escribe un `focos_AAAAMM.csv` por mes en `visor_deptos/datos/`. La unión por nombre se hace solo acá: los CSV salen con `in1`. La clase de anomalía (1 a 5) se calcula con la regla de SEPA contra el período `climatology` de `config.json`. Un departamento sin fila en un año no tiene fila ese mes; la media de referencia usa solo los años con dato, como la planilla. Opciones: `--config` y `--out`.
 
-Si un departamento aparece dos veces en el mismo año, o un nombre no está en `ESTADISTICAS`, el conversor se detiene y lo nombra. Usa solo la biblioteca estándar de Node.
+Si un nombre no está en `ESTADISTICAS`, el conversor se detiene y lo nombra. Si un departamento tiene más de una fila en el mismo año, ese año queda sin dato y el conversor lo lista en un aviso: no adivina cuál es la fila correcta. La planilla de 2026 tiene tres casos (San Pedro 2022, San Roque 2022 y Comandante Fernández 2020), porque algunas filas tienen el año mal cargado. Usa solo la biblioteca estándar de Node.
 
 ## Pruebas
 
@@ -77,12 +77,11 @@ php -S localhost:8000 -t visor_deptos
 
 y abrir <http://localhost:8000/>. Antes hay que generar los datos (ver arriba). La carpeta `visor_deptos/cache/` debe permitir escritura al proceso de PHP; si no la permite, `serie.php` arma la serie en cada pedido sin guardarla.
 
-## Reemplazar los datos sintéticos por los de SEPA
+## Actualizar los datos
 
-1. Borrar los `focos_*.csv` sintéticos de `visor_deptos/datos/`.
+1. Si quedaron CSV sintéticos, borrar los `focos_*.csv` de `visor_deptos/datos/`.
 2. Generar los CSV desde la planilla (ver «Convertir la planilla de SEPA») o copiar los de SEPA con el mismo nombre (`focos_AAAAMM.csv`) y las columnas `in1,focos,anomalia`. `in1` es el código INDEC de 5 dígitos, con el cero inicial; `anomalia` es la clase 1 a 5.
 3. No hace falta tocar código: `listar.php` detecta los meses y `serie.php` rearma el caché cuando cambia algún CSV.
-4. Quitar el aviso de datos sintéticos de `index.php`.
 
 Los departamentos sin fila en un mes se muestran en gris como «sin dato».
 

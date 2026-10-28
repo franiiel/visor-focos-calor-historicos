@@ -29,10 +29,6 @@ $pageTitle = $config['title'];
 include __DIR__ . '/partials/header.php';
 ?>
 <main class="visor" id="visor">
-  <div class="visor-banner" role="note">
-    Prototipo con datos sintéticos de prueba — no representan focos reales.
-  </div>
-
   <h1 class="visor-title"><?php echo h($config['title']); ?></h1>
   <p class="visor-subtitle" id="map-title" aria-live="polite">Cargando datos…</p>
 
