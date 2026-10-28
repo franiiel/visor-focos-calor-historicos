@@ -13,11 +13,15 @@ Delivery: `exception-ok` (one branch, work-unit commits, no PR yet). Runners: `n
 
 ## Tasks
 
-- [ ] T1 Converter + tests (S1, S2). Route: inline.
-- [ ] T2 Viewer classes, config, PHP validation, generator, tests (S3, S4). Route: inline.
-- [ ] T3 Docs and banner (S5). Route: inline.
+- [x] T1 Converter + tests (S1, S2). Route: inline. Commit d8a09f0. Runs on the real workbook only after the duplicate-year decision (L3).
+- [x] T2 Viewer classes, config, PHP validation, generator, tests (S3, S4). Route: inline. Commit a808017.
+- [~] T3 Docs (S5) done in a808017. Banner removal pending: real CSVs cannot be generated until L3 is decided.
 
 ## Log
 
 - L1 (2026-10-28) User: "Bueno vamos a implementarlo ahora" — implement the design recorded in `VISOR_FOCOS.md` (commit 57abce5).
 - L2 Route: inline. No writer trigger: units depend on each other (T2 consumes the class contract T1 defines); no parallelism reason.
+- L3 T1 evidence. RED: module not found. GREEN: 6/6 converter tests (two expectations of mine were wrong: one reference year with value v gives class 3, since v > 0.9·v). On the real workbook the converter stops: `Department 22021 has more than one row for 2020`. Four rows carry a wrong year (their position is inside another year's block): 9679 "2020" in the 2021 block and 10189 "2020" in the 2022 block (Comandante Fernández, Chaco), 9639 "2022" (San Pedro, Buenos Aires) and 9759 "2022" (San Roque, Corrientes), both in the 2021 block. Decision pending with the user.
+- L4 Scratch verification (rows re-yeared by block, climatology 2001–2025): 309 months, 200101–202609. 2026 classes vs SEPA sheets ENERO..AGO: 4072/4080 equal. All 8 differences are in ABRIL, whose references use 2001–2024 for 460 of 510 departments (SEPA sheet error; e.g. 18056 April 2025 = 70 left out of MAX). Province check vs ESTADISTICAS-PROVINCIALES: 173/7107 province-months differ, 169 of them in 2021–2022 (e.g. Entre Ríos 202112: departments 717, province 476). Question for SEPA.
+- L5 T2 evidence. RED: scales tests fail (`anomalyLabel` not exported), generator contract test fails, PHP fatal on missing `anomalyClasses`. GREEN: node 29/29, PHP 61 checks exit 0, `node --check` app.js/scales.js, `php -l` config.php. Integration (`php -S`, synthetic data regenerated): index 200 with the 5 labels embedded, `serie.php?in1=06007` 200 with integer classes. Not done: visual browser check of the legend.
+- L6 RDD: `review assess --base-ref 8540791 --committed-only` (untracked xlsx excluded) → medium, `under_budget`, review not due.
