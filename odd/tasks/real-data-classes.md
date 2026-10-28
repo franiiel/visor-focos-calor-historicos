@@ -13,9 +13,9 @@ Delivery: `exception-ok` (one branch, work-unit commits, no PR yet). Runners: `n
 
 ## Tasks
 
-- [x] T1 Converter + tests (S1, S2). Route: inline. Commit d8a09f0. Runs on the real workbook only after the duplicate-year decision (L3).
+- [x] T1 Converter + tests (S1, S2). Route: inline. Commits d8a09f0, 3fb4734 (repeated department-years skipped and reported, L7).
 - [x] T2 Viewer classes, config, PHP validation, generator, tests (S3, S4). Route: inline. Commit a808017.
-- [~] T3 Docs (S5) done in a808017. Banner removal pending: real CSVs cannot be generated until L3 is decided.
+- [x] T3 Docs (S5) in a808017; banner removed and real CSVs generated in 3fb4734.
 
 ## Log
 
@@ -25,3 +25,4 @@ Delivery: `exception-ok` (one branch, work-unit commits, no PR yet). Runners: `n
 - L4 Scratch verification (rows re-yeared by block, climatology 2001–2025): 309 months, 200101–202609. 2026 classes vs SEPA sheets ENERO..AGO: 4072/4080 equal. All 8 differences are in ABRIL, whose references use 2001–2024 for 460 of 510 departments (SEPA sheet error; e.g. 18056 April 2025 = 70 left out of MAX). Province check vs ESTADISTICAS-PROVINCIALES: 173/7107 province-months differ, 169 of them in 2021–2022 (e.g. Entre Ríos 202112: departments 717, province 476). Question for SEPA.
 - L5 T2 evidence. RED: scales tests fail (`anomalyLabel` not exported), generator contract test fails, PHP fatal on missing `anomalyClasses`. GREEN: node 29/29, PHP 61 checks exit 0, `node --check` app.js/scales.js, `php -l` config.php. Integration (`php -S`, synthetic data regenerated): index 200 with the 5 labels embedded, `serie.php?in1=06007` 200 with integer classes. Not done: visual browser check of the legend.
 - L6 RDD: `review assess --base-ref 8540791 --committed-only` (untracked xlsx excluded) → medium, `under_budget`, review not due.
+- L7 (2026-10-28) User decision on the rows with a wrong year: "Omitir y avisar (Recomendado)". RED: 4 converter tests fail (new `{ byMonth, skipped }` shape). GREEN: node 30/30, PHP exit 0. Real run: 309 CSVs 200101–202609, warning lists 06770 2022, 18161 2022, 22021 2020; 0 empty classes. 2026 vs SEPA: 4071/4080, all 9 differences in April (8 from SEPA's 2001–2024 sheet, 1 from the skipped year). `php -S`: banner gone, `listar.php` 309 months, `serie.php?in1=22021` 2020 all null. Data issues added to VISOR_FOCOS.md questions 5–7. RDD reassess after 3fb4734: medium, `under_budget` (17 paths, 802 lines). Not done: visual browser check.
