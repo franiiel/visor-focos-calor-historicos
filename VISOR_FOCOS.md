@@ -172,7 +172,14 @@ El gráfico de un departamento necesita todos sus meses. Si el navegador tuviera
 1. Selectores de año y mes (por defecto, el último disponible).
 2. Mapa coroplético con dos capas a elegir, **anomalía** y **focos totales**, que son los dos mapas de la imagen actual. La anomalía con una leyenda fija de cinco colores, uno por clase (de "igual o por debajo del mínimo histórico" a "por encima del máximo histórico"), y los totales con escala secuencial.
 3. Al pasar el mouse: nombre del departamento, provincia y valor. En la capa de anomalía, el texto de la clase.
-4. Al hacer clic: gráfico con la serie mensual del departamento y su promedio histórico como referencia.
+4. Al hacer clic: gráfico con la serie mensual del departamento, de 2001 en adelante. Muestra:
+   - **Focos del mes:** la cantidad de cada mes. Un mes sin dato corta la línea.
+   - **Promedio de referencia:** para cada mes, el promedio de ese mismo mes calendario en el período `climatology` (2001–2025): en enero, el de todos los eneros. Por eso la línea sigue la estación. Se calcula solo con los años que tienen dato, igual que la media de las clases.
+   - **Mes seleccionado:** un punto que acompaña a los selectores de año y mes.
+
+   Arriba del gráfico, un texto resume el mes elegido: focos, clase de anomalía y promedio de referencia.
+
+   El gráfico **no muestra la clase**. La clase depende de la banda de ±10 % alrededor de la media y del mínimo y el máximo históricos, que no se dibujan. Un mes apenas por encima de la línea de promedio puede ser "Normal", y uno muy por encima puede no superar el máximo histórico. La clase se lee en el texto del panel o en el mapa.
 5. Se mantienen las descargas actuales (JPG y KML) para quien las use.
 
 ### Librerías
