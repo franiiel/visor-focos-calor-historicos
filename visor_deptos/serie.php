@@ -1,10 +1,11 @@
 <?php
-// Monthly series of every department, consolidated from datos/*.csv and cached in
-// cache/serie.json (see lib/series.php for the shape).
+// Serie mensual de todos los departamentos, consolidada a partir de los CSV de datos/ descritos
+// en config.json y guardada en caché en cache/serie.json (ver lib/series.php para la estructura).
 //
-// Optional parameter: in1 (exactly 5 digits). When present, returns only that
-// department: { "in1", "months", "focos", "anomalia", "clim" }.
+// Parámetro opcional: in1 (exactamente 5 dígitos). Si está presente, devuelve solo ese
+// departamento: { "in1", "months", "value", "anomaly", "clim" }.
 
+require __DIR__ . '/lib/config.php';
 require __DIR__ . '/lib/series.php';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -19,7 +20,7 @@ function serie_error($status, $message)
 
 $in1 = null;
 if (isset($_GET['in1'])) {
-    // \z instead of $ so a trailing newline is rejected too.
+    // \z en lugar de $ para rechazar también un salto de línea final.
     if (!is_string($_GET['in1']) || !preg_match('/^\d{5}\z/', $_GET['in1'])) {
         serie_error(400, 'Parámetro in1 inválido: se esperan 5 dígitos.');
     }
@@ -27,11 +28,16 @@ if (isset($_GET['in1'])) {
 }
 
 try {
-    $json = series_cached_json(__DIR__ . '/datos', __DIR__ . '/cache/serie.json');
-} catch (SeriesCsvException $e) {
-    // Name the file only; the absolute path stays in the server log.
+    $config = visor_config(__DIR__ . '/config.json');
+    $json = series_cached_json(__DIR__ . '/datos', __DIR__ . '/cache/serie.json', $config);
+} catch (VisorConfigException $e) {
     error_log('serie.php: ' . $e->getMessage());
-    serie_error(500, 'Archivo de datos inválido: ' . $e->csvName . ' (se esperan las columnas in1,focos,anomalia).');
+    serie_error(500, 'Configuración inválida: config.json.');
+} catch (SeriesCsvException $e) {
+    // Se nombra solo el archivo; la ruta absoluta queda en el log del servidor.
+    error_log('serie.php: ' . $e->getMessage());
+    serie_error(500, 'Archivo de datos inválido: ' . $e->csvName
+        . ' (se esperan las columnas ' . visor_expected_header($config) . ').');
 } catch (Throwable $e) {
     error_log('serie.php: ' . $e->getMessage());
     serie_error(500, 'No se pudo armar la serie.');
@@ -42,7 +48,7 @@ if ($in1 === null) {
     exit;
 }
 
-// Decode as objects so "06007"-style keys are kept as strings.
+// Se decodifica como objetos para que las claves del tipo "06007" se conserven como cadenas.
 $all = json_decode($json);
 if (!is_object($all) || !isset($all->data->{$in1})) {
     serie_error(404, 'Departamento sin datos.');
@@ -51,7 +57,7 @@ if (!is_object($all) || !isset($all->data->{$in1})) {
 echo json_encode([
     'in1' => $in1,
     'months' => $all->months,
-    'focos' => $all->data->{$in1}->focos,
-    'anomalia' => $all->data->{$in1}->anomalia,
+    'value' => $all->data->{$in1}->value,
+    'anomaly' => $all->data->{$in1}->anomaly,
     'clim' => $all->clim->{$in1},
 ]);

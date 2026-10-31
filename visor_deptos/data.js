@@ -1,4 +1,4 @@
-// Pure data helpers for the viewer (no DOM), tested with node:test.
+// Funciones puras de datos para el visor (sin DOM), probadas con node:test.
 
 const MONTH_NAMES = [
   'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -14,23 +14,29 @@ function toNumber(text) {
   return Number.isFinite(n) ? n : null;
 }
 
-// Parses one monthly CSV (`in1,focos,anomalia`) into Map<in1, {focos, anomalia}>.
-// in1 stays a string so the leading zero is preserved; rows with an invalid code
-// are skipped, and empty or non-numeric values become null ("sin dato").
-export function parseMonthCsv(text) {
+// Interpreta un CSV mensual como Map<in1, {value, anomaly}>, leyendo los nombres de columna
+// indicados en config.json (`columns: {value, anomaly}`, en minúsculas).
+// in1 se mantiene como cadena para conservar el cero inicial; las filas con un código inválido
+// se omiten, y los valores vacíos o no numéricos pasan a ser null ("sin dato").
+export function parseMonthCsv(text, columns) {
+  const expected = `in1,${columns.value},${columns.anomaly}`;
   const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim() !== '');
-  if (!lines.length) throw new Error('CSV vacío: falta el encabezado in1,focos,anomalia');
+  if (!lines.length) throw new Error(`CSV vacío: falta el encabezado ${expected}`);
   const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
-  const col = { in1: header.indexOf('in1'), focos: header.indexOf('focos'), anomalia: header.indexOf('anomalia') };
-  if (col.in1 < 0 || col.focos < 0 || col.anomalia < 0) {
-    throw new Error('Encabezado inválido: se esperaba in1,focos,anomalia');
+  const col = {
+    in1: header.indexOf('in1'),
+    value: header.indexOf(columns.value),
+    anomaly: header.indexOf(columns.anomaly),
+  };
+  if (col.in1 < 0 || col.value < 0 || col.anomaly < 0) {
+    throw new Error(`Encabezado inválido: se esperaba ${expected}`);
   }
   const rows = new Map();
   for (const line of lines.slice(1)) {
     const cells = line.split(',');
     const in1 = (cells[col.in1] ?? '').trim();
     if (!/^\d{5}$/.test(in1)) continue;
-    rows.set(in1, { focos: toNumber(cells[col.focos]), anomalia: toNumber(cells[col.anomalia]) });
+    rows.set(in1, { value: toNumber(cells[col.value]), anomaly: toNumber(cells[col.anomaly]) });
   }
   return rows;
 }
@@ -44,8 +50,72 @@ export function monthLabel(aaaamm) {
   return `${MONTH_NAMES[month - 1]} ${year}`;
 }
 
-// Sequences async requests so only the latest one may apply its result:
-// take a token with next() before awaiting, then check isCurrent(token) after.
+// Los lustros (bloques de 5 años) se anclan en el primer año de la serie: 2001–2005, 2006–2010, …
+export function lustrumStart(year, firstYear) {
+  return firstYear + Math.floor((year - firstYear) / 5) * 5;
+}
+
+// Para cada mes, la media de los valores mensuales de su lustro (null si el bloque no tiene datos).
+export function lustrumMeans(months, values) {
+  if (months.length === 0) return [];
+  const firstYear = splitMonth(months[0]).year;
+  const blocks = new Map(); // año de inicio -> { sum, count }
+  const starts = months.map((m) => lustrumStart(splitMonth(m).year, firstYear));
+  starts.forEach((start, i) => {
+    const b = blocks.get(start) || { sum: 0, count: 0 };
+    if (values[i] !== null && values[i] !== undefined) {
+      b.sum += values[i];
+      b.count += 1;
+    }
+    blocks.set(start, b);
+  });
+  return starts.map((start) => {
+    const b = blocks.get(start);
+    return b.count > 0 ? b.sum / b.count : null;
+  });
+}
+
+// Total mensual de los departamentos cuyo in1 empieza con prefix (un código de provincia de 2 dígitos,
+// o '' para todo el país). Un mes en el que ninguno de ellos tiene datos es null.
+export function sumSeries(months, data, prefix = '') {
+  const sums = months.map(() => null);
+  for (const [in1, series] of Object.entries(data)) {
+    if (!in1.startsWith(prefix)) continue;
+    series.value.forEach((v, i) => {
+      if (v !== null && v !== undefined) sums[i] = (sums[i] ?? 0) + v;
+    });
+  }
+  return sums;
+}
+
+// Media, mínimo y máximo de cada mes calendario en los meses from..to (AAAAMM, inclusive),
+// contando solo los meses con datos. Cada uno es un arreglo de 12, null para un mes sin datos.
+export function monthlyStats(months, values, from, to) {
+  const byMonth = Array.from({ length: 12 }, () => []);
+  months.forEach((m, i) => {
+    const v = values[i];
+    if (m >= from && m <= to && v !== null && v !== undefined) byMonth[splitMonth(m).month - 1].push(v);
+  });
+  const stat = (fn) => byMonth.map((vs) => (vs.length ? fn(vs) : null));
+  return {
+    mean: stat((vs) => vs.reduce((a, b) => a + b, 0) / vs.length),
+    min: stat((vs) => Math.min(...vs)),
+    max: stat((vs) => Math.max(...vs)),
+  };
+}
+
+// Los 12 valores mensuales de un año, null donde ese mes no tiene datos.
+export function yearValues(months, values, year) {
+  const out = Array(12).fill(null);
+  months.forEach((m, i) => {
+    const { year: y, month } = splitMonth(m);
+    if (y === year && values[i] !== undefined) out[month - 1] = values[i];
+  });
+  return out;
+}
+
+// Ordena las solicitudes asíncronas para que solo la última pueda aplicar su resultado:
+// se toma un token con next() antes del await y después se verifica isCurrent(token).
 export function createLatestGuard() {
   let latest = 0;
   return {

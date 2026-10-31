@@ -1,23 +1,35 @@
 <?php
-// Department heat-hotspot viewer. The header and footer partials are placeholders:
-// on integration they are replaced by the SEPA site's real header and footer.
+// Visor departamental de focos de calor. Los parciales de encabezado y pie de página son provisorios:
+// en la integración se reemplazan por el encabezado y el pie de página reales del sitio de SEPA.
 
-// Cache busting: the version changes whenever the file changes.
+// Invalidación de caché: la versión cambia cada vez que cambia el archivo.
 function asset_version($file)
 {
     $t = @filemtime(__DIR__ . '/' . $file);
     return $t ? (string) $t : '0';
 }
 
-$pageTitle = 'Focos de calor por departamento';
+require __DIR__ . '/lib/config.php';
+try {
+    $config = visor_config(__DIR__ . '/config.json');
+} catch (VisorConfigException $e) {
+    error_log('index.php: ' . $e->getMessage());
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'Configuración inválida: config.json.';
+    exit;
+}
+
+function h($text)
+{
+    return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+}
+
+$pageTitle = $config['title'];
 include __DIR__ . '/partials/header.php';
 ?>
 <main class="visor" id="visor">
-  <div class="visor-banner" role="note">
-    Prototipo con datos sintéticos de prueba — no representan focos reales.
-  </div>
-
-  <h1 class="visor-title">Focos de calor por departamento</h1>
+  <h1 class="visor-title"><?php echo h($config['title']); ?></h1>
   <p class="visor-subtitle" id="map-title" aria-live="polite">Cargando datos…</p>
 
   <form class="visor-controls" id="controls" onsubmit="return false;">
@@ -27,10 +39,16 @@ include __DIR__ . '/partials/header.php';
     <label>Mes
       <select id="sel-month" disabled></select>
     </label>
+    <label>Provincia
+      <select id="sel-prov" disabled><option value="">Todas</option></select>
+    </label>
+    <label>Departamento
+      <select id="sel-depto" disabled><option value="">Todos</option></select>
+    </label>
     <fieldset class="visor-layer">
       <legend>Capa</legend>
-      <label><input type="radio" name="layer" value="anomalia" checked> Anomalía</label>
-      <label><input type="radio" name="layer" value="focos"> Focos totales</label>
+      <label><input type="radio" name="layer" value="anomaly" checked> Anomalía</label>
+      <label><input type="radio" name="layer" value="value"> <?php echo h($config['valueLabel']); ?></label>
     </fieldset>
   </form>
 
@@ -43,19 +61,42 @@ include __DIR__ . '/partials/header.php';
     </div>
 
     <aside class="visor-panel" id="panel">
-      <h2 id="panel-title">Serie del departamento</h2>
-      <p id="panel-info" class="visor-hint">Seleccione un departamento en el mapa para ver su serie mensual.</p>
+      <div class="visor-panel-head">
+        <h2 id="panel-title">Argentina</h2>
+        <button type="button" class="visor-icon-btn" id="chart-expand" aria-pressed="false"
+                aria-label="Ampliar gráfico" title="Ampliar gráfico">
+          <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+          <svg class="icon-collapse" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+        </button>
+      </div>
+      <p id="panel-info" class="visor-hint">Cargando serie…</p>
+      <p class="visor-hint">Elija una provincia o un departamento en el mapa para ver su serie.</p>
       <div class="visor-chart-wrap">
-        <canvas id="chart" aria-label="Serie mensual de focos del departamento" role="img"></canvas>
+        <canvas id="chart" aria-label="Serie mensual de <?php echo h($config['unit']); ?>" role="img"></canvas>
       </div>
     </aside>
   </div>
 
-  <p class="visor-note">
-    Anomalía: diferencia entre los focos del mes y el promedio de focos del mismo mes
-    en 2001–2020 (supuesto del prototipo; la definición final la establece SEPA).
-  </p>
+  <section class="visor-years" aria-labelledby="years-title">
+    <h2 id="years-title">Comparación por año</h2>
+    <div class="visor-years-filter">
+      <label>Agregar año
+        <select id="years-add"></select>
+      </label>
+      <ul class="visor-years-chips" id="years-chips" aria-label="Años elegidos"></ul>
+    </div>
+    <p class="visor-hint" id="years-hint"></p>
+    <div class="visor-chart-wrap" id="years-chart-wrap" hidden>
+      <canvas id="years-chart" aria-label="<?php echo h($config['unit']); ?> por mes de los años elegidos, con el promedio, el máximo y el mínimo históricos" role="img"></canvas>
+    </div>
+  </section>
+
+  <p class="visor-note"><?php echo h($config['note']); ?></p>
 </main>
+
+<script type="application/json" id="visor-config"><?php
+echo json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
+?></script>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H"

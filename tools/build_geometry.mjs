@@ -1,24 +1,24 @@
 #!/usr/bin/env node
-// One-time tool: builds visor_deptos/deptos.geo.json from SEPA's DEPTOS-PROV.geojson.
+// Herramienta de uso único: genera visor_deptos/deptos.geo.json a partir del DEPTOS-PROV.geojson de SEPA.
 //
-// Usage:
+// Uso:
 //   node tools/build_geometry.mjs [--raw tools/raw] [--out visor_deptos/deptos.geo.json] [--simplify 3%]
 //
-// Steps:
-//   1. Download DEPTOS-PROV.geojson into the raw directory if it is not there yet.
-//      The raw file is treated as untrusted data: it is only parsed as JSON, never executed.
-//   2. Normalize properties: in1 = LINK zero padded to 5 chars (Buenos Aires codes come
-//      unpadded, e.g. "6441"), depto, provincia. The `id` property is never used.
-//   3. Run a pinned mapshaper (via npx) to dissolve the multiple polygons of each
-//      department into one feature, simplify preserving topology, and reduce precision.
-//   4. Validate and report feature count, duplicate/missing codes, and file size.
+// Pasos:
+//   1. Descarga DEPTOS-PROV.geojson en el directorio raw si todavía no está.
+//      El archivo crudo se trata como dato no confiable: solo se interpreta como JSON, nunca se ejecuta.
+//   2. Normaliza las propiedades: in1 = LINK completado con ceros a 5 caracteres (los códigos de Buenos Aires vienen
+//      sin completar, p. ej. "6441"), depto, provincia. La propiedad `id` nunca se usa.
+//   3. Ejecuta un mapshaper con versión fija (vía npx) para disolver los múltiples polígonos de cada
+//      departamento en un solo feature, simplificar preservando la topología y reducir la precisión.
+//   4. Valida e informa la cantidad de features, los códigos duplicados/faltantes y el tamaño del archivo.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-// Pinned exact version, published 2026-09-09 (more than 14 days before adoption).
+// Versión exacta fijada, publicada el 2026-09-09 (más de 14 días antes de su adopción).
 const MAPSHAPER = 'mapshaper@0.7.61';
 const SOURCE_URL =
   'https://sepa.inta.gob.ar/productos/focos/seccion-focos/data/geoJSON/DEPTOS-PROV.geojson';
@@ -67,8 +67,8 @@ export function normalizeFeatures(collection) {
   return { type: 'FeatureCollection', features };
 }
 
-// Runs npx through the npm CLI bundled with the current Node, without a shell, so
-// paths with spaces are passed safely on every platform.
+// Ejecuta npx mediante el CLI de npm incluido con el Node actual, sin shell, para que
+// las rutas con espacios se pasen de forma segura en todas las plataformas.
 function runNpx(args) {
   const npxCli = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js');
   const [cmd, cmdArgs] = existsSync(npxCli)

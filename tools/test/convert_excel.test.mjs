@@ -1,0 +1,166 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { deflateRawSync } from 'node:zlib';
+
+import { anomalyClass, buildMonthlyRows, convertWorkbook, readXlsxSheets } from '../convert_excel.mjs';
+
+const CONFIG = {
+  filePrefix: 'focos',
+  columns: { value: 'focos', anomaly: 'anomalia' },
+  climatology: { from: '200101', to: '200212' },
+};
+
+test('anomalyClass follows the SEPA rule, evaluated from class 5 down', () => {
+  const stats = { max: 10, mean: 5, min: 1 }; // banda normal: 4.5 .. 5.5
+  assert.equal(anomalyClass(11, stats), 5);
+  assert.equal(anomalyClass(10, stats), 4); // igual al máximo no lo supera
+  assert.equal(anomalyClass(6, stats), 4);
+  assert.equal(anomalyClass(5, stats), 3);
+  assert.equal(anomalyClass(4, stats), 2);
+  assert.equal(anomalyClass(2, stats), 2);
+  assert.equal(anomalyClass(1, stats), 1); // igual al mínimo
+  assert.equal(anomalyClass(0, stats), 1);
+  // El borde superior de la banda normal sigue siendo normal (> estricto).
+  assert.equal(anomalyClass(11, { max: 20, mean: 10, min: 0 }), 3);
+  // Un departamento que nunca tuvo focos: cero es clase 1.
+  assert.equal(anomalyClass(0, { max: 0, mean: 0, min: 0 }), 1);
+});
+
+const CODES = new Map([['BUENOS AIRES|ALBERTI', '06021'], ['CHACO|ALMIRANTE BROWN', '22007']]);
+const months = (ene, feb = null) => [ene, feb, ...new Array(10).fill(null)];
+
+test('buildMonthlyRows averages only the years with a row and skips missing rows', () => {
+  const history = [
+    { year: 2001, prov: 'BUENOS AIRES', depto: 'ALBERTI', values: months(2, 0) },
+    { year: 2002, prov: 'BUENOS AIRES', depto: 'ALBERTI', values: months(4, 0) },
+    { year: 2003, prov: 'BUENOS AIRES', depto: 'ALBERTI', values: months(9) }, // fuera de la referencia
+    { year: 2001, prov: 'CHACO', depto: 'ALMIRANTE BROWN', values: months(0, 1) },
+  ];
+  const { byMonth: result } = buildMonthlyRows(history, CODES, CONFIG.climatology);
+  // 2003-02 está vacío en todas las filas, así que no es un mes del conjunto de datos.
+  assert.deepEqual([...result.keys()], ['200101', '200102', '200201', '200202', '200301']);
+  // Alberti, enero: referencia 2 y 4 (mean 3, max 4, min 2).
+  assert.deepEqual(result.get('200101'), [['06021', 2, 1], ['22007', 0, 1]]);
+  assert.deepEqual(result.get('200201'), [['06021', 4, 4]]);
+  // 9 > max 4. Almirante Brown no tiene fila de 2003, así que no tiene fila ese mes (no cero).
+  assert.deepEqual(result.get('200301'), [['06021', 9, 5]]);
+  // Almirante Brown, febrero: un único año de referencia con 1 foco queda dentro de la
+  // banda normal (1 > 0.9). Alberti tiene 0 en todos los años de referencia: 0 no supera 0.
+  assert.deepEqual(result.get('200102'), [['06021', 0, 1], ['22007', 1, 3]]);
+});
+
+test('buildMonthlyRows leaves the class empty when the month has no reference years', () => {
+  const history = [{ year: 2003, prov: 'BUENOS AIRES', depto: 'ALBERTI', values: months(3) }];
+  assert.deepEqual(buildMonthlyRows(history, CODES, CONFIG.climatology).byMonth.get('200301'), [['06021', 3, null]]);
+});
+
+test('buildMonthlyRows rejects unknown names', () => {
+  assert.throws(
+    () => buildMonthlyRows([{ year: 2001, prov: 'CHACO', depto: 'NOPE', values: months(1) }], CODES, CONFIG.climatology),
+    /CHACO \/ NOPE/,
+  );
+});
+
+test('buildMonthlyRows leaves a repeated department-year without data and reports it', () => {
+  const history = [
+    { year: 2001, prov: 'CHACO', depto: 'ALMIRANTE BROWN', values: months(1) },
+    { year: 2001, prov: 'CHACO', depto: 'ALMIRANTE BROWN', values: months(7) },
+    { year: 2002, prov: 'CHACO', depto: 'ALMIRANTE BROWN', values: months(2) },
+    { year: 2001, prov: 'BUENOS AIRES', depto: 'ALBERTI', values: months(3) },
+  ];
+  const { byMonth, skipped } = buildMonthlyRows(history, CODES, CONFIG.climatology);
+  assert.deepEqual(skipped, ['22007 CHACO / ALMIRANTE BROWN 2001 (2 rows)']);
+  // No se usa ninguna de las filas repetidas, ni siquiera como referencia: 2002 es su único año.
+  assert.deepEqual(byMonth.get('200101'), [['06021', 3, 3]]);
+  assert.deepEqual(byMonth.get('200201'), [['22007', 2, 3]]);
+});
+
+// Escritor mínimo de .xlsx para fixtures: un zip con entradas comprimidas con deflate (el CRC no se verifica).
+function zip(files) {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const [name, text] of Object.entries(files)) {
+    const nameBuf = Buffer.from(name);
+    const raw = Buffer.from(text);
+    const data = deflateRawSync(raw);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(8, 8);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(raw.length, 22);
+    local.writeUInt16LE(nameBuf.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(8, 10);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(raw.length, 24);
+    central.writeUInt16LE(nameBuf.length, 28);
+    central.writeUInt32LE(offset, 42);
+    locals.push(local, nameBuf, data);
+    centrals.push(central, nameBuf);
+    offset += local.length + nameBuf.length + data.length;
+  }
+  const cd = Buffer.concat(centrals);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(Object.keys(files).length, 8);
+  end.writeUInt16LE(Object.keys(files).length, 10);
+  end.writeUInt32LE(cd.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, cd, end]);
+}
+
+const cell = (ref, v) => (typeof v === 'string' ? `<c r="${ref}" t="s"><v>${v.slice(1)}</v></c>` : `<c r="${ref}"><v>${v}</v></c>`);
+const row = (r, cells) => `<row r="${r}">${cells.map(([col, v]) => cell(`${col}${r}`, v)).join('')}</row>`;
+const sheet = (rows) => `<worksheet><sheetData>${rows.join('')}</sheetData></worksheet>`;
+const MONTH_COLS = ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O'];
+
+// Las shared strings se referencian como '#<index>'.
+function fixtureWorkbook() {
+  const strings = ['AÑO', 'PROV', 'DEPTO', 'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC',
+    'COD_PROV', 'COD_DEPTO', 'BUENOS AIRES', 'CAÑUELAS &amp; CO', '06'];
+  const s = (text) => `#${strings.indexOf(text)}`;
+  const historyHeader = row(1, [['A', s('AÑO')], ['B', s('PROV')], ['C', s('DEPTO')],
+    ...MONTH_COLS.map((col, i) => [col, s(strings[3 + i])])]);
+  const history = sheet([
+    historyHeader,
+    row(2, [['A', 2001], ['B', s('BUENOS AIRES')], ['C', s('CAÑUELAS &amp; CO')], ['D', 3], ['E', 1]]),
+    row(3, [['A', 2002], ['B', s('BUENOS AIRES')], ['C', s('CAÑUELAS &amp; CO')], ['D', 5]]),
+  ]);
+  // COD_PROV como texto, COD_DEPTO como número sin completar con ceros.
+  const codes = sheet([
+    row(1, [['A', s('COD_PROV')], ['B', s('COD_DEPTO')], ['C', s('PROV')], ['D', s('DEPTO')]]),
+    row(2, [['A', s('06')], ['B', 7], ['C', s('BUENOS AIRES')], ['D', s('CAÑUELAS &amp; CO')]]),
+  ]);
+  return zip({
+    'xl/workbook.xml': '<workbook><sheets><sheet name="ESTADISTICAS" sheetId="1" r:id="rId2"/>' +
+      '<sheet name="FCXMESXAÑO" sheetId="2" r:id="rId1"/></sheets></workbook>',
+    'xl/_rels/workbook.xml.rels': '<Relationships>' +
+      '<Relationship Id="rId1" Type="x/worksheet" Target="worksheets/sheet9.xml"/>' +
+      '<Relationship Target="/xl/worksheets/sheet3.xml" Id="rId2" Type="x/worksheet"/></Relationships>',
+    'xl/sharedStrings.xml': `<sst>${strings.map((t) => `<si><t>${t}</t></si>`).join('')}</sst>`,
+    'xl/worksheets/sheet9.xml': history,
+    'xl/worksheets/sheet3.xml': codes,
+  });
+}
+
+test('readXlsxSheets resolves sheets by name and decodes shared strings', () => {
+  const sheets = readXlsxSheets(fixtureWorkbook(), ['ESTADISTICAS']);
+  assert.deepEqual(sheets.ESTADISTICAS, [['COD_PROV', 'COD_DEPTO', 'PROV', 'DEPTO'], ['06', '7', 'BUENOS AIRES', 'CAÑUELAS & CO']]);
+  assert.throws(() => readXlsxSheets(fixtureWorkbook(), ['NOPE']), /NOPE/);
+});
+
+test('convertWorkbook writes one CSV per month with the configured names', () => {
+  const { files, skipped } = convertWorkbook(fixtureWorkbook(), CONFIG);
+  assert.deepEqual(skipped, []);
+  assert.deepEqual(files, [
+    // Referencia de enero 3 y 5: 3 es el mínimo (clase 1), 5 supera la media + 10 % (clase 4).
+    { name: 'focos_200101.csv', content: 'in1,focos,anomalia\n06007,3,1\n' },
+    { name: 'focos_200102.csv', content: 'in1,focos,anomalia\n06007,1,3\n' },
+    { name: 'focos_200201.csv', content: 'in1,focos,anomalia\n06007,5,4\n' },
+  ]);
+  const custom = convertWorkbook(fixtureWorkbook(), { ...CONFIG, filePrefix: 'viirs', columns: { value: 'n', anomaly: 'clase' } }).files;
+  assert.equal(custom[0].name, 'viirs_200101.csv');
+  assert.equal(custom[0].content, 'in1,n,clase\n06007,3,1\n');
+});

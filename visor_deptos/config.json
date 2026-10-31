@@ -1,0 +1,19 @@
+{
+  "title": "Focos de calor por departamento",
+  "filePrefix": "focos",
+  "columns": { "value": "focos", "anomaly": "anomalia" },
+  "integerValues": true,
+  "unit": "focos",
+  "valueLabel": "Focos totales",
+  "valueTitle": "Focos de calor totales",
+  "anomalyTitle": "Anomalía de focos de calor",
+  "climatology": { "from": "200101", "to": "202512" },
+  "anomalyClasses": [
+    "Igual o por debajo del mínimo histórico",
+    "Por debajo de lo normal",
+    "Normal",
+    "Por encima de lo normal",
+    "Por encima del máximo histórico"
+  ],
+  "note": "Anomalía: compara los focos del mes con los del mismo mes en 2001–2025. Normal es estar dentro de ±10 % del promedio; los extremos son el mínimo y el máximo de ese período."
+}

@@ -1,6 +1,6 @@
 <?php
-// PLACEHOLDER: imitates the structure of the SEPA site header. On integration this
-// file is replaced by (or includes) the site's real header.
+// PLACEHOLDER: imita la estructura del encabezado del sitio de SEPA. En la integración, este
+// archivo se reemplaza por el encabezado real del sitio (o lo incluye).
 $pageTitle = isset($pageTitle) ? $pageTitle : 'SEPA';
 ?><!DOCTYPE html>
 <html lang="es">

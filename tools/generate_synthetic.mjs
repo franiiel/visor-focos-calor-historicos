@@ -1,23 +1,24 @@
 #!/usr/bin/env node
-// Generates SYNTHETIC monthly heat-hotspot CSVs for the prototype viewer.
-// The numbers are invented test data with a plausible shape; they are not real hotspots.
+// Genera CSV mensuales SINTÉTICOS de focos de calor para el visor prototipo.
+// Los números son datos de prueba inventados con una forma verosímil; no son focos reales.
 //
-// Usage:
+// Uso:
 //   node tools/generate_synthetic.mjs [--geo visor_deptos/deptos.geo.json]
 //        [--out visor_deptos/datos] [--from 200101] [--to 202608] [--seed 20260908]
 //
-// Output contract (same as SEPA's real files): datos/focos_AAAAMM.csv with header
-// `in1,focos,anomalia`, one row per department.
-// Prototype assumption: anomalia = focos - mean(focos of the same department and
-// calendar month over 2001-2020), rounded to one decimal.
+// Contrato de salida (igual que los archivos reales de SEPA): datos/focos_AAAAMM.csv con encabezado
+// `in1,focos,anomalia`, una fila por departamento. anomalia es la clase 1-5 de SEPA respecto del
+// mismo departamento y mes calendario en 2001-2025, calculada igual que en el conversor.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { anomalyClass, referenceStats } from './convert_excel.mjs';
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const BASELINE_FROM = '200101';
-const BASELINE_TO = '202012';
+const BASELINE_TO = '202512';
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -31,7 +32,7 @@ export function mulberry32(seed) {
 }
 
 function gaussian(rand) {
-  // Box-Muller; 1 - rand() avoids log(0).
+  // Box-Muller; 1 - rand() evita log(0).
   return Math.sqrt(-2 * Math.log(1 - rand())) * Math.cos(2 * Math.PI * rand());
 }
 
@@ -69,7 +70,7 @@ function forEachPosition(coords, fn) {
   else for (const c of coords) forEachPosition(c, fn);
 }
 
-// Department list with bounding-box centre (good enough to assign a region).
+// Lista de departamentos con el centro de su bounding box (suficiente para asignar una región).
 export function departmentsFromGeojson(geo) {
   return geo.features
     .map((f) => {
@@ -93,7 +94,7 @@ export function departmentsFromGeojson(geo) {
     .sort((a, b) => a.in1.localeCompare(b.in1));
 }
 
-// Seasonal weights by calendar month (Jan..Dec), roughly averaging 1.
+// Pesos estacionales por mes calendario (ene..dic), con un promedio aproximado de 1.
 const SEASONS = {
   north: [0.3, 0.2, 0.2, 0.3, 0.4, 0.6, 1.0, 1.8, 2.3, 1.9, 0.8, 0.4],
   delta: [0.6, 0.7, 0.8, 0.9, 0.9, 1.0, 1.4, 1.8, 1.5, 1.0, 0.6, 0.5],
@@ -101,7 +102,7 @@ const SEASONS = {
   patagonia: [2.4, 2.1, 1.2, 0.5, 0.2, 0.1, 0.1, 0.1, 0.2, 0.5, 1.0, 1.8],
 };
 
-// Mean monthly hotspots for a "typical" department of each region.
+// Focos mensuales medios de un departamento "típico" de cada región.
 const NORTH_HIGH = new Set(['22', '34', '66', '86']); // Chaco, Formosa, Salta, Santiago del Estero
 const NORTH_OTHER = new Set(['10', '18', '38', '46', '54', '90']);
 const CENTER = new Set(['14', '42', '74', '82']);
@@ -114,7 +115,7 @@ export function regionOf(dep) {
   if (prov === '02') return { season: 'center', base: 0 };
   if (NORTH_HIGH.has(prov)) return { season: 'north', base: 14 };
   if (NORTH_OTHER.has(prov)) return { season: 'north', base: 5 };
-  // Parana Delta: southern Entre Rios and the northeastern Buenos Aires islands.
+  // Delta del Paraná: sur de Entre Ríos y las islas del noreste de Buenos Aires.
   if (prov === '30' && dep.lat < -32.6) return { season: 'delta', base: 10 };
   if (prov === '06' && dep.lat > -34.6 && dep.lon > -60.6) return { season: 'delta', base: 2.5 };
   if (prov === '30') return { season: 'center', base: 3 };
@@ -122,10 +123,10 @@ export function regionOf(dep) {
   if (CUYO.has(prov)) return { season: 'center', base: 1.2 };
   if (NORTH_PATAGONIA.has(prov)) return { season: 'patagonia', base: 0.8 };
   if (SOUTH_PATAGONIA.has(prov)) return { season: 'patagonia', base: 0.15 };
-  return { season: 'center', base: 0.5 }; // Buenos Aires and anything else
+  return { season: 'center', base: 0.5 }; // Buenos Aires y cualquier otro
 }
 
-// A few extreme years per seasonal region (loosely inspired by known fire seasons).
+// Algunos años extremos por región estacional (inspirados libremente en temporadas de incendios conocidas).
 const EXTREME_YEARS = {
   north: { 2007: 2.2, 2012: 1.8, 2020: 2.5, 2022: 2.0 },
   delta: { 2008: 3.5, 2020: 3.0, 2022: 2.5 },
@@ -133,7 +134,7 @@ const EXTREME_YEARS = {
   patagonia: { 2015: 2.5, 2021: 2.0, 2022: 2.2 },
 };
 
-// Returns { months, series: { in1: { focos: [...], anomalia: [...] } } }.
+// Devuelve { months, series: { in1: { focos: [...], anomalia: [...] } } }.
 export function generateSeries(departments, months, { seed = 20260908 } = {}) {
   const rand = mulberry32(seed);
   const years = [...new Set(months.map((m) => Number(m.slice(0, 4))))];
@@ -163,20 +164,12 @@ export function generateSeries(departments, months, { seed = 20260908 } = {}) {
 }
 
 function anomalies(months, focos) {
-  const sum = new Array(12).fill(0);
-  const count = new Array(12).fill(0);
-  months.forEach((m, i) => {
-    if (m >= BASELINE_FROM && m <= BASELINE_TO) {
-      const cm = Number(m.slice(4)) - 1;
-      sum[cm] += focos[i];
-      count[cm] += 1;
-    }
-  });
+  const reference = Array.from({ length: 12 }, (_, cm) =>
+    referenceStats(focos.filter((_, i) => Number(months[i].slice(4)) - 1 === cm && months[i] >= BASELINE_FROM && months[i] <= BASELINE_TO)),
+  );
   return months.map((m, i) => {
-    const cm = Number(m.slice(4)) - 1;
-    const mean = count[cm] ? sum[cm] / count[cm] : 0;
-    // Round to one decimal; `+ 0` turns -0 into 0.
-    return Math.round((focos[i] - mean) * 10) / 10 + 0;
+    const ref = reference[Number(m.slice(4)) - 1];
+    return ref ? anomalyClass(focos[i], ref) : null;
   });
 }
 
@@ -184,25 +177,10 @@ export function monthCsv(monthIndex, departments, series) {
   const lines = ['in1,focos,anomalia'];
   for (const dep of departments) {
     const s = series[dep.in1];
-    lines.push(`${dep.in1},${s.focos[monthIndex]},${s.anomalia[monthIndex].toFixed(1)}`);
+    lines.push(`${dep.in1},${s.focos[monthIndex]},${s.anomalia[monthIndex] ?? ''}`);
   }
   return lines.join('\n') + '\n';
 }
-
-const README = `DATOS SINTETICOS DE PRUEBA
-
-Los archivos focos_AAAAMM.csv de esta carpeta fueron generados por
-tools/generate_synthetic.mjs para el prototipo del visor. Son datos inventados
-con una forma plausible (estacionalidad y diferencias regionales) y NO
-representan focos de calor reales.
-
-Formato: in1,focos,anomalia (una fila por departamento).
-Supuesto del prototipo: anomalia = focos - promedio de focos del mismo
-departamento y el mismo mes calendario en 2001-2020.
-
-Para usar datos reales, reemplazar estos archivos por los CSV de SEPA con el
-mismo nombre y formato. No hace falta cambiar codigo.
-`;
 
 export function writeDataset({ departments, from, to, seed, outDir }) {
   const months = listMonths(from, to);
@@ -211,7 +189,6 @@ export function writeDataset({ departments, from, to, seed, outDir }) {
   months.forEach((m, i) => {
     writeFileSync(join(outDir, `focos_${m}.csv`), monthCsv(i, departments, series));
   });
-  writeFileSync(join(outDir, 'LEEME.txt'), README);
   return months.length;
 }
 

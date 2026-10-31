@@ -66,11 +66,11 @@ test('written dataset follows the CSV contract', () => {
     assert.equal(files.length, 308);
     assert.equal(files[0], 'focos_200101.csv');
     assert.equal(files.at(-1), 'focos_202608.csv');
-    assert.ok(existsSync(join(out, 'LEEME.txt')));
+    // datos/LEEME.txt está versionado, no se genera.
+    assert.ok(!existsSync(join(out, 'LEEME.txt')));
 
     const expectedCodes = departments.map((d) => d.in1).sort();
-    // sums[in1][calendarMonth] of anomalies over 2001-2020, to check they average ~0.
-    const sums = new Map();
+    const classes = new Set();
     let zeros = 0;
     let rows = 0;
     let maxFocos = 0;
@@ -86,21 +86,18 @@ test('written dataset follows the CSV contract', () => {
         assert.equal(extra, undefined);
         assert.match(in1, /^\d{5}$/);
         assert.match(focos, /^\d+$/);
-        assert.match(anomalia, /^-?\d+\.\d$/);
+        assert.match(anomalia, /^[1-5]$/);
+        // Dentro de la referencia 2001-2025 ningún mes puede superar su propio máximo.
+        if (month <= '202512') assert.notEqual(anomalia, '5', `class 5 inside the reference in ${file}`);
+        classes.add(anomalia);
         codes.push(in1);
         rows += 1;
         if (focos === '0') zeros += 1;
         maxFocos = Math.max(maxFocos, Number(focos));
-        if (month <= '202012') {
-          const key = `${in1}-${month.slice(4)}`;
-          sums.set(key, (sums.get(key) ?? 0) + Number(anomalia));
-        }
       }
       assert.deepEqual(codes.sort(), expectedCodes, `codes in ${file}`);
     }
-    for (const [key, sum] of sums) {
-      assert.ok(Math.abs(sum / 20) <= 0.051, `baseline anomaly mean for ${key} is ${sum / 20}`);
-    }
+    assert.deepEqual([...classes].sort(), ['1', '2', '3', '4', '5']);
     assert.ok(zeros / rows > 0.3, 'expected many zero months');
     assert.ok(maxFocos > 100, 'expected some high-intensity months');
   } finally {
