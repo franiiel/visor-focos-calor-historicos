@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseMonthCsv, splitMonth, monthLabel, createLatestGuard } from '../../visor_deptos/data.js';
+import {
+  parseMonthCsv, splitMonth, monthLabel, createLatestGuard, lustrumStart, lustrumMeans,
+} from '../../visor_deptos/data.js';
 
 const COLUMNS = { value: 'focos', anomaly: 'anomalia' };
 
@@ -35,6 +37,21 @@ test('parseMonthCsv rejects a file without the configured header', () => {
 test('splitMonth and monthLabel', () => {
   assert.deepEqual(splitMonth('202608'), { year: 2026, month: 8 });
   assert.equal(monthLabel('202608'), 'agosto 2026');
+});
+
+test('lustrumStart groups years in 5-year blocks from the first year', () => {
+  assert.equal(lustrumStart(2001, 2001), 2001);
+  assert.equal(lustrumStart(2005, 2001), 2001);
+  assert.equal(lustrumStart(2006, 2001), 2006);
+  assert.equal(lustrumStart(2026, 2001), 2026);
+});
+
+test('lustrumMeans averages each 5-year block, skipping months without data', () => {
+  // Un valor por año (enero) alcanza para ejercitar los bloques.
+  const months = ['200101', '200301', '200501', '200601', '201001', '201101'];
+  const values = [10, null, 20, 4, 6, null];
+  assert.deepEqual(lustrumMeans(months, values), [15, 15, 15, 5, 5, null]);
+  assert.deepEqual(lustrumMeans([], []), []);
 });
 
 test('createLatestGuard marks only the newest token as current', () => {

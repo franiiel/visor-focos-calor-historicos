@@ -2,7 +2,9 @@
 // index.php incrusta como #visor-config. index.php carga Leaflet (L) y Chart.js (Chart)
 // como scripts UMD con versión fija.
 import { buildScale, colorFor, legendItems, formatNumber, anomalyLabel } from './scales.js';
-import { parseMonthCsv, splitMonth, monthLabel, MONTH_NAMES, createLatestGuard } from './data.js';
+import {
+  parseMonthCsv, splitMonth, monthLabel, MONTH_NAMES, createLatestGuard, lustrumStart, lustrumMeans,
+} from './data.js';
 
 const L = globalThis.L;
 const Chart = globalThis.Chart;
@@ -274,17 +276,21 @@ function updatePanelInfo() {
     $('panel-info').textContent = `Sin dato para ${monthLabel(state.month)}.`;
     return;
   }
-  const clim = s.clim ? s.clim[splitMonth(state.month).month - 1] : null;
   $('panel-info').textContent =
     `${monthLabel(state.month)}: ${formatNumber(s.value[idx], VALUE_DECIMALS)} ${UNIT} · ` +
-    `anomalía: ${anomalyLabel(s.anomaly[idx], CLASS_LABELS).toLowerCase()} · ` +
-    `promedio ${CLIM_PERIOD} del mes: ${formatNumber(clim, 1)}`;
+    `anomalía: ${anomalyLabel(s.anomaly[idx], CLASS_LABELS).toLowerCase()}`;
 }
 
 function renderChart() {
   const s = state.series;
-  // Referencia: la media climatológica del mismo mes calendario, repetida a lo largo de la serie.
-  const reference = s.months.map((m) => (s.clim ? s.clim[splitMonth(m).month - 1] : null));
+  const years = s.months.map((m) => splitMonth(m).year);
+  const firstYear = years[0];
+  const lastYear = years[years.length - 1];
+  const starts = years.map((y) => lustrumStart(y, firstYear));
+  const lustrumLabel = (i) => {
+    const to = Math.min(starts[i] + 4, lastYear);
+    return to === starts[i] ? `${starts[i]}` : `${starts[i]}–${to}`;
+  };
   if (state.chart) state.chart.destroy();
   state.chart = new Chart($('chart'), {
     type: 'line',
@@ -301,12 +307,18 @@ function renderChart() {
           spanGaps: false,
         },
         {
-          label: `Promedio ${CLIM_PERIOD} del mismo mes`,
-          data: reference,
-          borderColor: '#555',
-          borderDash: [4, 3],
-          borderWidth: 1,
+          label: 'Promedio mensual del lustro',
+          data: lustrumMeans(s.months, s.value),
+          borderColor: '#000',
+          backgroundColor: '#000',
+          borderWidth: 2,
           pointRadius: 0,
+          // Chart.js dibuja encima el order más bajo; sin esto, la serie mensual tapa estas líneas.
+          order: -1,
+          // Se oculta el segmento que une dos lustros, para que cada media sea una línea horizontal separada.
+          segment: {
+            borderColor: (ctx) => (starts[ctx.p0DataIndex] === starts[ctx.p1DataIndex] ? undefined : 'transparent'),
+          },
         },
         {
           label: 'Mes seleccionado',
@@ -316,6 +328,7 @@ function renderChart() {
           pointRadius: 5,
           pointHoverRadius: 6,
           showLine: false,
+          order: -2,
         },
       ],
     },
@@ -329,11 +342,17 @@ function renderChart() {
         y: { beginAtZero: true, title: { display: true, text: UNIT_TITLE } },
       },
       plugins: {
-        legend: { position: 'bottom', labels: { boxWidth: 14 } },
+        legend: {
+          position: 'bottom',
+          labels: { boxWidth: 14, sort: (a, b) => a.datasetIndex - b.datasetIndex },
+        },
         tooltip: {
+          itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
           filter: (item) => item.raw !== null,
           callbacks: {
-            label: (item) => `${item.dataset.label}: ${formatNumber(item.raw, item.datasetIndex === 1 ? 1 : VALUE_DECIMALS)}`,
+            label: (item) => (item.datasetIndex === 1
+              ? `Promedio mensual ${lustrumLabel(item.dataIndex)}: ${formatNumber(item.raw, 1)}`
+              : `${item.dataset.label}: ${formatNumber(item.raw, VALUE_DECIMALS)}`),
           },
         },
       },

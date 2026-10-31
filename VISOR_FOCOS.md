@@ -155,9 +155,9 @@ El visor no está atado a los focos MODIS. Todo lo que depende del conjunto de d
 
 - `filePrefix` y `columns`: nombre de los CSV (`datos/<filePrefix>_AAAAMM.csv`) y de sus dos columnas numéricas. `in1` es siempre la clave de unión. Con los valores de arriba, el formato es el de "Formato de datos propuesto".
 - `integerValues`: `true` para conteos (se redondean a enteros); `false` para conservar decimales.
-- `climatology`: período de referencia (AAAAMM, inclusive; el mes va de 01 a 12). Es el mismo con el que SEPA calcula las clases, 2001–2025, y el visor lo usa para el promedio que muestra el gráfico.
+- `climatology`: período de referencia (AAAAMM, inclusive; el mes va de 01 a 12). Es el mismo con el que SEPA calcula las clases, 2001–2025, y el visor lo muestra en la leyenda de la anomalía.
 - `anomalyClasses`: los textos de las clases 1 a 5, en ese orden. Aparecen en la leyenda y en el tooltip.
-- `title`, `unit`, `valueLabel`, `valueTitle`, `anomalyTitle` y `note`: textos de la página, la leyenda, el tooltip y el gráfico. Las etiquetas del gráfico y del panel toman el período de `climatology`, pero `note` es texto libre: si menciona el período o la unidad, se actualiza a mano junto con `climatology` y `unit`.
+- `title`, `unit`, `valueLabel`, `valueTitle`, `anomalyTitle` y `note`: textos de la página, la leyenda, el tooltip y el gráfico. La leyenda de la anomalía toma el período de `climatology`, pero `note` es texto libre: si menciona el período o la unidad, se actualiza a mano junto con `climatology` y `unit`.
 
 Para mostrar otro conjunto con la misma forma (un valor mensual y su clase de anomalía por departamento, por ejemplo focos VIIRS), se reemplazan los CSV de `datos/` y se edita `config.json`. El caché de `serie.php` se regenera solo, porque su huella incluye la configuración. Si `config.json` falta o no es válido (por ejemplo, un prefijo con `/` o `..`), los tres puntos de entrada responden un error 500 que lo nombra: no hay valores por defecto ocultos en el código, así que `config.json` se sube siempre junto con el resto de los archivos. Se acepta guardado con o sin BOM UTF-8.
 
@@ -193,12 +193,12 @@ El gráfico de un departamento necesita todos sus meses. Si el navegador tuviera
 3. Al pasar el mouse: nombre del departamento, provincia y valor. En la capa de anomalía, el texto de la clase.
 4. Al hacer clic: gráfico con la serie mensual del departamento, de 2001 en adelante. Muestra:
    - **Focos del mes:** la cantidad de cada mes. Un mes sin dato corta la línea.
-   - **Promedio de referencia:** para cada mes, el promedio de ese mismo mes calendario en el período `climatology` (2001–2025): en enero, el de todos los eneros. Por eso la línea sigue la estación. Se calcula solo con los años que tienen dato, igual que la media de las clases.
+   - **Promedio por lustro:** una línea horizontal por cada bloque de cinco años, contados desde el primer año de la serie (2001–2005, 2006–2010, …). Es el promedio de los focos mensuales del bloque, solo con los meses que tienen dato. El último bloque puede estar incompleto (por ejemplo, 2026): su promedio usa los meses disponibles.
    - **Mes seleccionado:** un punto que acompaña a los selectores de año y mes.
 
-   Arriba del gráfico, un texto resume el mes elegido: focos, clase de anomalía y promedio de referencia.
+   Arriba del gráfico, un texto resume el mes elegido: focos y clase de anomalía.
 
-   El gráfico **no muestra la clase**. La clase depende de la banda de ±10 % alrededor de la media y del mínimo y el máximo históricos, que no se dibujan. Un mes apenas por encima de la línea de promedio puede ser "Normal", y uno muy por encima puede no superar el máximo histórico. La clase se lee en el texto del panel o en el mapa.
+   El gráfico **no muestra la clase** ni el promedio de referencia de cada mes (el de ese mismo mes calendario en el período `climatology`). La clase depende de la banda de ±10 % alrededor de esa media mensual y del mínimo y el máximo históricos, que no se dibujan. Las líneas de lustro muestran la tendencia de largo plazo, no la referencia de la clase: un mes por encima de su lustro puede ser "Normal" o incluso estar por debajo del promedio de su mes. La clase se lee en el texto del panel o en el mapa.
 5. Se mantienen las descargas actuales (JPG y KML) para quien las use.
 
 ### Librerías

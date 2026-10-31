@@ -50,6 +50,31 @@ export function monthLabel(aaaamm) {
   return `${MONTH_NAMES[month - 1]} ${year}`;
 }
 
+// Los lustros (bloques de 5 años) se anclan en el primer año de la serie: 2001–2005, 2006–2010, …
+export function lustrumStart(year, firstYear) {
+  return firstYear + Math.floor((year - firstYear) / 5) * 5;
+}
+
+// Para cada mes, la media de los valores mensuales de su lustro (null si el bloque no tiene datos).
+export function lustrumMeans(months, values) {
+  if (months.length === 0) return [];
+  const firstYear = splitMonth(months[0]).year;
+  const blocks = new Map(); // año de inicio -> { sum, count }
+  const starts = months.map((m) => lustrumStart(splitMonth(m).year, firstYear));
+  starts.forEach((start, i) => {
+    const b = blocks.get(start) || { sum: 0, count: 0 };
+    if (values[i] !== null && values[i] !== undefined) {
+      b.sum += values[i];
+      b.count += 1;
+    }
+    blocks.set(start, b);
+  });
+  return starts.map((start) => {
+    const b = blocks.get(start);
+    return b.count > 0 ? b.sum / b.count : null;
+  });
+}
+
 // Ordena las solicitudes asíncronas para que solo la última pueda aplicar su resultado:
 // se toma un token con next() antes del await y después se verifica isCurrent(token).
 export function createLatestGuard() {
