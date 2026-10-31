@@ -61,6 +61,27 @@ Escribe en `visor_deptos/datos/` un `focos_AAAAMM.csv` por mes, con todos los de
 
 El último mes queda incompleto si la descarga termina antes de fin de mes: el script muestra la fecha del último foco.
 
+## Actualización mensual automática
+
+En el servidor, un cron calcula cada mes el CSV del mes anterior con la API de FIRMS. Usa solo PHP (sin Node):
+
+```sh
+FIRMS_MAP_KEY=xxxxxxxx php visor_deptos/lib/actualizar_mes.php --geojson /ruta/DEPTOS-PROV.geojson
+```
+
+Línea de crontab (el día 2 de cada mes a las 4:00; las rutas son las del servidor):
+
+```
+FIRMS_MAP_KEY=xxxxxxxx
+0 4 2 * * php /ruta/visor_deptos/lib/actualizar_mes.php --geojson /ruta/seccion-focos/data/geoJSON/DEPTOS-PROV.geojson >> /ruta/logs/visor_deptos.log 2>&1
+```
+
+- `FIRMS_MAP_KEY`: clave gratuita de <https://firms.modaps.eosdis.nasa.gov/api/map_key/>. Va solo en el entorno del cron, nunca en el repositorio.
+- Opciones: `--mes AAAAMM` (por defecto, el mes anterior), `--source` (`MODIS_NRT` por defecto, `MODIS_SP` para los datos definitivos), `--csv archivo.csv` (una descarga local de FIRMS en lugar de la API), `--config` y `--datos`.
+- Aplica las mismas reglas que `tools/compute_anomalies.mjs` y toma las referencias de los CSV 2001–2025 de `datos/`. Por eso la serie histórica tiene que estar generada antes.
+- Si algo falla (red, clave, respuesta que no es un CSV de FIRMS), termina con código 1, escribe el error en stderr y no deja ningún archivo. Si sale bien, escribe una línea con el mes, los focos asignados y los que quedaron fuera de todo departamento.
+- Solo corre desde la línea de comandos. Está en `lib/`, que no se sirve por web.
+
 ## Convertir la planilla de SEPA
 
 ```sh
@@ -76,6 +97,7 @@ Si un nombre no está en `ESTADISTICAS`, el conversor se detiene y lo nombra. Si
 ```sh
 node --test "tools/test/*.test.mjs"
 php tools/test/series_test.php
+php tools/test/actualizar_mes_test.php
 ```
 
 Las pruebas de Node cubren las escalas y el formato (`scales.js`), la lectura de CSV y el control de pedidos superpuestos (`data.js`), el conversor (regla de clases, media y desvío sobre los años con dato, nombres desconocidos o repetidos y lectura de un `.xlsx` de prueba), el motor de FIRMS (punto en polígono con huecos y multipolígonos, NRT solo después del archivo histórico, ceros y referencias) y el generador (determinismo y formato de los archivos). La prueba de PHP no usa frameworks: cubre `lib/series.php` (forma de la serie, prefijo y columnas configurados, huella de la carpeta `datos/` y de la configuración, reutilización del caché y error ante un CSV sin las columnas requeridas), la validación de `config.json` y las respuestas de `listar.php` y `serie.php` (forma del JSON y códigos 400, 404 y 500), que corre como subprocesos sobre una copia temporal. Termina con código 0 si todo pasa.

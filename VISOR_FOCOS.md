@@ -78,7 +78,7 @@ Si cada mes hubiera que correr un script aparte, armar un archivo y subirlo, el 
 ├── deptos.geo.json      geometría de departamentos (estática)
 ├── listar.php           devuelve la lista de meses disponibles
 ├── serie.php            devuelve la serie consolidada (con caché)
-├── lib/                 funciones PHP compartidas (no se acceden desde la web)
+├── lib/                 funciones PHP compartidas y actualizar_mes.php del cron (no se acceden desde la web)
 ├── cache/
 │   └── serie.json       generado por serie.php, no se edita a mano
 └── datos/
@@ -223,11 +223,28 @@ El gráfico de un departamento necesita todos sus meses. Si el navegador tuviera
 2. **Prototipo local** con la geometría y dos o tres meses de datos de ejemplo. Se valida el diseño antes de tocar el sitio.
 3. **Carga de la serie histórica** (2001 en adelante) desde la planilla departamental, con el script de conversión de `tools/`, y control contra la planilla provincial.
 4. **Integración en el sitio:** plantilla con el header y el footer, ubicación definitiva y link desde el menú de productos.
-5. **Operación mensual:** el proceso de SEPA deja el CSV del mes en `datos/` junto con la JPG. El visor lo muestra solo, sin tocar código. Falta acordar cómo se genera ese CSV (ver "Riesgos").
+5. **Operación mensual:** un cron del servidor de SEPA deja el CSV del mes en `datos/` (ver «Actualización mensual automática»). El visor lo muestra solo, sin tocar código.
+
+### Actualización mensual automática
+
+La serie histórica se genera una sola vez con el motor de Node (`tools/compute_anomalies.mjs`). Después, cada mes, `lib/actualizar_mes.php` calcula solo el mes nuevo. Es PHP de línea de comandos porque PHP es lo único que seguro está en el servidor:
+
+```
+FIRMS_MAP_KEY=xxxxxxxx
+0 4 2 * * php /ruta/visor_deptos/lib/actualizar_mes.php --geojson /ruta/seccion-focos/data/geoJSON/DEPTOS-PROV.geojson >> /ruta/logs/visor_deptos.log 2>&1
+```
+
+- **Cuándo:** el día 2 de cada mes a las 4:00. Calcula el mes anterior, cuando el NRT de FIRMS ya está completo.
+- **De dónde saca los focos:** de la API de área de FIRMS (`MODIS_NRT`, recuadro de Argentina, pedidos de 5 días como máximo). Necesita un MAP_KEY, que es gratuito y va en la variable `FIRMS_MAP_KEY`, nunca en el código.
+- **Por qué no usa el archivo del visor de 5 días:** `firms_latest.csv` es una ventana de 7 días que se pisa en cada descarga. Para armar un mes habría que acumularlo, y si el cron se corta más de una semana el mes queda incompleto sin forma de recuperarlo. La API, en cambio, devuelve cualquier mes pasado.
+- **Mismas reglas que el motor:** todos los focos, `DEPTOS-PROV.geojson` completo (el mismo archivo que ya usa el visor de 5 días), 0 para los departamentos sin focos y clase contra el mismo mes de 2001–2025, que se lee de los CSV de `datos/`. Para agosto y septiembre de 2026 da exactamente los mismos archivos que el motor de Node.
+- **Sin meses a medias:** si un pedido falla, la clave no es válida o la respuesta no es un CSV de FIRMS, termina con código 1, deja el error en el log y no escribe nada. El archivo se escribe con un nombre temporal y se renombra al final.
+- **Rehacer un mes:** `--mes AAAAMM`. Con `--csv archivo.csv` lee una descarga hecha a mano en lugar de usar la API.
+- **NRT y datos definitivos:** el NRT puede diferir un poco de los datos definitivos (`MODIS_SP`), que FIRMS publica dos o tres meses después. Si SEPA quiere los definitivos, alcanza con una segunda línea en el cron: `--source MODIS_SP --mes <de hace tres meses>`. Rehacer un mes de 2001–2025 no recalcula las clases de los otros meses: para eso se vuelve a correr el motor de Node.
 
 ## Riesgos
 
-- **Formato de entrega mensual sin definir.** Los datos existen (ver "Datos recibidos de SEPA"), pero hoy viven en una planilla que se completa a mano, y PHP no lee `.xlsx` sin una librería externa. Lo ideal es que SEPA exporte cada mes el CSV en el formato acordado. Si no puede, alguien tiene que correr el script de conversión todos los meses, y eso es justo lo que el diseño busca evitar (ver "Idea central"). El motor de FIRMS saca la planilla del medio, pero no evita el paso mensual: alguien tiene que bajar los focos del mes y correrlo, salvo que el servidor de SEPA lo haga solo, como ya baja el CSV de FIRMS para el visor de 5 días.
+- **Formato de entrega mensual sin definir.** Los datos existen (ver "Datos recibidos de SEPA"), pero hoy viven en una planilla que se completa a mano, y PHP no lee `.xlsx` sin una librería externa. Lo ideal es que SEPA exporte cada mes el CSV en el formato acordado. Si no puede, alguien tiene que correr el script de conversión todos los meses, y eso es justo lo que el diseño busca evitar (ver "Idea central"). El motor de FIRMS saca la planilla del medio, y el cron mensual (ver «Actualización mensual automática») saca el paso manual. Falta que SEPA instale el cron, saque un MAP_KEY de FIRMS y confirme que el servidor puede consultar la API (ya descarga de FIRMS el CSV del visor de 5 días).
 - **Continuidad de MODIS.** Terra y Aqua llevan más de 20 años en órbita y se acercan al fin de su misión, y el sitio ya publica productos con VIIRS. Conviene decidir desde el principio con qué sensor se arma el visor, o que la columna de datos indique el sensor.
 - **Mantenimiento.** Si nadie del equipo de SEPA toma el visor como propio, se desactualiza. Por eso sigue el formato de sus otros visores.
 - **`descargarkml.php` acepta cualquier valor en `uri`.** Con `?uri=x` responde 200 con un KML. No se exploró más, pero conviene revisarlo con el mismo criterio que `listar_archivos_MNC.php` antes de enlazarlo desde el visor nuevo.

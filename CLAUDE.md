@@ -17,6 +17,8 @@ node tools/compute_anomalies.mjs --firms DL_FIRE_M-C61_43028  # FIRMS points -> 
 node tools/convert_excel.mjs --xlsx ESTADISTICAS-DEPARTAMENTALES2026.xlsx  # SEPA workbook -> visor_deptos/datos/
 node --test "tools/test/*.test.mjs"    # unit tests (a bare directory argument does not work in Node 24)
 php tools/test/series_test.php         # PHP tests for lib/series.php (plain PHP, exit code 0/1)
+php tools/test/actualizar_mes_test.php # PHP tests for the monthly cron script
+FIRMS_MAP_KEY=... php visor_deptos/lib/actualizar_mes.php --geojson tools/raw/DEPTOS-PROV.geojson [--mes AAAAMM] [--csv file]  # monthly update (cron, PHP only)
 php -S localhost:8000 -t visor_deptos  # serve the viewer (needs PHP 7.4+)
 ```
 
@@ -37,6 +39,7 @@ It is a separate product from AgroENSO. Don't reuse its pipeline or couple the t
 - **PHP endpoints:**
   - `listar.php` takes no parameters and lists the available months.
   - `serie.php` builds and caches `cache/serie.json`, regenerating it when the fingerprint (sha1 of the config plus every CSV's name, size and mtime) differs from the one stored in the cache. A CSV without the configured columns is a 500 error naming the file, never an empty month. An invalid `config.json` is a 500 naming it, on every entry point.
+  - `lib/actualizar_mes.php` is the CLI-only monthly cron job (FIRMS area API, `FIRMS_MAP_KEY` from the environment). It must produce exactly what `tools/compute_anomalies.mjs` produces for the same month; keep the two in sync.
   - Any parameter an endpoint does accept must be strictly validated (e.g. `^\d{5}$`). Path or URI inputs are a known weak spot on the SEPA site (`listar_archivos_MNC.php`, `descargarkml.php`).
 - **Pin CDN library versions** (Leaflet 1.9.4, Chart.js). The existing SEPA viewers load Leaflet unversioned; don't copy that.
 - The geometry is generated once from `DEPTOS-PROV.geojson` (~13 MB, too heavy as-is), simplified and stored as a static file.
