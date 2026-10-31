@@ -150,10 +150,14 @@ function monthly_download($month, $source, $key)
     foreach (monthly_windows($month) as list($date, $days)) {
         $url = MONTHLY_FIRMS_API . "/$key/$source/" . MONTHLY_BBOX . "/$days/$date";
         $text = @file_get_contents($url, false, $context);
-        $status = isset($http_response_header[0]) ? $http_response_header[0] : 'no response';
-        if ($text === false || strpos($status, ' 200') === false) {
+        $status = isset($http_response_header[0]) ? $http_response_header[0] : null;
+        if ($text === false || $status === null || strpos($status, ' 200') === false) {
             // The URL carries the MAP_KEY: never print it.
-            throw new RuntimeException("FIRMS request for $date ($days days) failed: $status");
+            $reason = $status ?? str_replace($key, '***', (string) (error_get_last()['message'] ?? 'no response'));
+            if (!extension_loaded('openssl')) {
+                $reason .= ' (the openssl extension is not loaded: PHP cannot open https URLs)';
+            }
+            throw new RuntimeException("FIRMS request for $date ($days days) failed: $reason");
         }
         $points = array_merge($points, monthly_parse_firms($text, $month));
     }
