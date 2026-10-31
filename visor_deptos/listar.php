@@ -1,5 +1,5 @@
 <?php
-// Available months (AAAAMM) of the dataset described in config.json. No parameters.
+// Meses disponibles (AAAAMM) del conjunto de datos descrito en config.json. Sin parámetros.
 
 require __DIR__ . '/lib/config.php';
 require __DIR__ . '/lib/series.php';

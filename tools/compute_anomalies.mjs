@@ -1,20 +1,20 @@
 #!/usr/bin/env node
-// Computes the viewer's monthly CSVs from raw NASA FIRMS MODIS hotspots:
-// datos/<filePrefix>_AAAAMM.csv with `in1,<value>,<anomaly>`, plus datos/referencia.csv
-// with the reference statistics (max, mean, min, standard deviation) per department and
-// calendar month.
+// Calcula los CSV mensuales del visor a partir de focos crudos de NASA FIRMS MODIS:
+// datos/<filePrefix>_AAAAMM.csv con `in1,<value>,<anomaly>`, más datos/referencia.csv
+// con las estadísticas de referencia (máximo, media, mínimo, desviación estándar) por departamento y
+// mes calendario.
 //
-// Usage:
+// Uso:
 //   node tools/compute_anomalies.mjs --firms DL_FIRE_M-C61_43028
 //        [--geojson tools/raw/DEPTOS-PROV.geojson] [--config visor_deptos/config.json]
 //        [--out visor_deptos/datos]
 //
-// --firms is a FIRMS download folder: one fire_archive_*.csv and, optionally, one
-// fire_nrt_*.csv. NRT points count only after the archive's last day. Every point
-// counts (no type or confidence filter, as SEPA's workbook). Each point is assigned by
-// point in polygon to the full DEPTOS-PROV.geojson (from `node tools/build_geometry.mjs`),
-// never the simplified viewer geometry. A department without points in a month has 0.
-// The class is SEPA's rule 1-5 (see VISOR_FOCOS.md) against the config.json climatology.
+// --firms es una carpeta de descarga de FIRMS: un fire_archive_*.csv y, opcionalmente, un
+// fire_nrt_*.csv. Los puntos NRT cuentan solo después del último día del archive. Todo punto
+// cuenta (sin filtro de tipo ni de confianza, como en el libro de SEPA). Cada punto se asigna por
+// punto en polígono sobre el DEPTOS-PROV.geojson completo (de `node tools/build_geometry.mjs`),
+// nunca sobre la geometría simplificada del visor. Un departamento sin puntos en un mes tiene 0.
+// La clase es la regla 1-5 de SEPA (ver VISOR_FOCOS.md) respecto de la climatología de config.json.
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -25,9 +25,9 @@ import { classifySeries, monthFiles } from './convert_excel.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-// ---------- Point in polygon ----------
+// ---------- Punto en polígono ----------
 
-// Even-odd ray casting over every ring, so holes are excluded.
+// Ray casting par-impar sobre todos los anillos, de modo que los huecos quedan excluidos.
 export function inPolygon(x, y, rings) {
   let inside = false;
   for (const ring of rings) {
@@ -50,8 +50,8 @@ const bboxOf = (rings) => {
 };
 const inBox = (b, x, y) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
 
-// Returns [{ in1, parts: [{ bbox, rings }] }] sorted by in1, one entry per department
-// (the source has several features for some departments).
+// Devuelve [{ in1, parts: [{ bbox, rings }] }] ordenado por in1, una entrada por departamento
+// (la fuente tiene varios features para algunos departamentos).
 export function prepareDepartments(geojson) {
   const byCode = new Map();
   for (const f of normalizeFeatures(geojson).features) {
@@ -63,7 +63,7 @@ export function prepareDepartments(geojson) {
   return [...byCode].sort(([a], [b]) => a.localeCompare(b)).map(([in1, parts]) => ({ in1, parts }));
 }
 
-// ponytail: linear scan with a bbox prefilter (fine for ~2M points); add a grid index if it gets slow.
+// ponytail: búsqueda lineal con prefiltro por bbox (suficiente para ~2M puntos); agregar un índice de grilla si se vuelve lento.
 export function findDepartment(depts, lon, lat) {
   for (const { in1, parts } of depts) {
     for (const { bbox, rings } of parts) {
@@ -73,10 +73,10 @@ export function findDepartment(depts, lon, lat) {
   return null;
 }
 
-// ---------- FIRMS CSV ----------
+// ---------- CSV de FIRMS ----------
 
-// Returns [{ lat, lon, date: 'AAAA-MM-DD' }]. Columns are found by header name, since
-// the archive and NRT files do not have the same columns.
+// Devuelve [{ lat, lon, date: 'AAAA-MM-DD' }]. Las columnas se buscan por nombre de encabezado, ya que
+// los archivos archive y NRT no tienen las mismas columnas.
 export function readFirms(text) {
   const lines = text.split(/\r?\n/);
   const header = lines[0].split(',');
@@ -100,7 +100,7 @@ export function readFirms(text) {
   return points;
 }
 
-// ---------- Engine ----------
+// ---------- Motor ----------
 
 function monthRange(from, to) {
   const months = [];
@@ -113,8 +113,8 @@ function monthRange(from, to) {
 const maxDate = (points) => points.reduce((a, p) => (p.date > a ? p.date : a), '');
 const cell = (v) => (v === null ? '' : String(v));
 
-// archive, nrt: FIRMS CSV texts (nrt may be null). Returns { files, reference (CSV
-// text), dropped (points outside every department), lastDate }.
+// archive, nrt: textos CSV de FIRMS (nrt puede ser null). Devuelve { files, reference (texto
+// CSV), dropped (puntos fuera de todo departamento), lastDate }.
 export function computeAnomalies({ archive, nrt, geojson, config }) {
   const points = readFirms(archive);
   const lastArchive = maxDate(points);
@@ -175,7 +175,7 @@ function parseArgs(argv) {
   return opts;
 }
 
-// The single file matching prefix in dir, or null when optional and absent.
+// El único archivo de dir que coincide con prefix, o null si es opcional y no está.
 function pick(dir, prefix, optional) {
   const found = readdirSync(dir).filter((f) => f.startsWith(prefix) && f.endsWith('.csv'));
   if (found.length > 1) throw new Error(`More than one ${prefix}*.csv in ${dir}`);
@@ -194,7 +194,7 @@ function main() {
   } catch (err) {
     throw new Error(`Cannot read ${opts.geojson} (run node tools/build_geometry.mjs to download it): ${err.message}`);
   }
-  // Strip a UTF-8 BOM, as lib/config.php does.
+  // Se quita un BOM UTF-8, como hace lib/config.php.
   const config = JSON.parse(readFileSync(resolve(opts.config), 'utf8').replace(/^﻿/, ''));
   const { files, reference, dropped, lastDate } = computeAnomalies({
     archive: readFileSync(archivePath, 'utf8'),

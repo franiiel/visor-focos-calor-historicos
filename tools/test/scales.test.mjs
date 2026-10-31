@@ -49,7 +49,7 @@ test('classIndex counts breaks strictly below the value', () => {
 });
 
 test('anomaly scale has one fixed colour per class 1-5', () => {
-  // The values do not move the classes: the same scale for any month.
+  // Los valores no mueven las clases: la misma escala para cualquier mes.
   const scale = buildScale('anomaly', [1, 1, 2], LABELS);
   assert.deepEqual(scale.colors, ANOMALY_COLORS);
   assert.equal(ANOMALY_COLORS.length, 5);

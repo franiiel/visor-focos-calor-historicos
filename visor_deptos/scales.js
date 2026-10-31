@@ -1,24 +1,24 @@
-// Pure colour-scale and formatting helpers for the viewer. No DOM access, so they
-// can be tested with node:test.
+// Funciones puras de escala de colores y de formato para el visor. No acceden al DOM, por lo que
+// se pueden probar con node:test.
 
 export const MISSING_COLOR = '#c8c8c8';
 
-// SEPA anomaly classes 1-5 (see VISOR_FOCOS.md): blue = fewer hotspots than normal,
-// neutral = normal, red = more; the ends are the historical minimum and maximum.
+// Clases de anomalía 1-5 de SEPA (ver VISOR_FOCOS.md): azul = menos focos que lo normal,
+// neutro = normal, rojo = más; los extremos son el mínimo y el máximo históricos.
 export const ANOMALY_COLORS = ['#2166ac', '#92c5de', '#f7f7f7', '#f4a582', '#b2182b'];
 
-// Sequential scale: first colour is reserved for zero hotspots.
+// Escala secuencial: el primer color se reserva para cero focos.
 export const COUNT_COLORS = [
   '#fffbe6', '#fee391', '#fec44f', '#fe9929', '#ec7014', '#cc4c02', '#8c2d04',
 ];
 
 const NICE_STEPS = [1, 2, 2.5, 5, 10];
 
-// Smallest "nice" number (1, 2, 2.5 or 5 times a power of ten) >= x.
+// Menor número "redondo" (1, 2, 2.5 o 5 por una potencia de diez) >= x.
 export function niceCeil(x) {
   if (!(x > 0)) return 0;
   const pow = 10 ** Math.floor(Math.log10(x));
-  // Tolerance avoids 3 -> 5 style jumps caused by floating point noise.
+  // La tolerancia evita saltos del tipo 3 -> 5 causados por el ruido de punto flotante.
   const step = NICE_STEPS.find((s) => s * pow >= x * (1 - 1e-9));
   return step * pow;
 }
@@ -33,8 +33,8 @@ function quantile(sorted, p) {
   return sorted[idx];
 }
 
-// Up to six ascending thresholds for positive counts, from quantiles of the
-// non-zero values rounded to nice numbers. Zero has its own class.
+// Hasta seis umbrales ascendentes para conteos positivos, a partir de cuantiles de los
+// valores distintos de cero redondeados a números redondos. El cero tiene su propia clase.
 export function countBreaks(values) {
   const positive = finite(values).filter((v) => v > 0).sort((a, b) => a - b);
   if (!positive.length) return [1];
@@ -46,20 +46,20 @@ export function countBreaks(values) {
   return breaks;
 }
 
-// Number of breaks strictly below the value (0..breaks.length).
+// Cantidad de cortes estrictamente menores que el valor (0..breaks.length).
 export function classIndex(value, breaks) {
   let i = 0;
   while (i < breaks.length && breaks[i] < value) i += 1;
   return i;
 }
 
-// kind: 'anomaly' (fixed classes 1-5, labelled by classLabels) or 'value'
-// (sequential with a zero class).
+// kind: 'anomaly' (clases fijas 1-5, rotuladas con classLabels) o 'value'
+// (secuencial con una clase para el cero).
 export function buildScale(kind, values, classLabels = []) {
   if (kind === 'anomaly') {
     return { kind, colors: ANOMALY_COLORS.slice(), labels: classLabels };
   }
-  // For counts, breaks[0] separates 0 from the first positive class.
+  // Para conteos, breaks[0] separa el 0 de la primera clase positiva.
   const breaks = [0, ...countBreaks(values)];
   return { kind, breaks, colors: COUNT_COLORS.slice(0, breaks.length + 1) };
 }
@@ -68,7 +68,7 @@ function isMissing(value) {
   return value === null || value === undefined || !Number.isFinite(value);
 }
 
-// Index 0-4 of an anomaly class, or -1 for anything that is not a class 1-5.
+// Índice 0-4 de una clase de anomalía, o -1 para cualquier valor que no sea una clase 1-5.
 function anomalyIndex(value) {
   return Number.isInteger(value) && value >= 1 && value <= 5 ? value - 1 : -1;
 }
@@ -92,7 +92,7 @@ export function formatNumber(value, decimals = 0) {
   return sign + grouped + (frac ? `,${frac}` : '');
 }
 
-// Legend entries from lowest to highest class, plus "Sin dato".
+// Entradas de la leyenda de la clase más baja a la más alta, más "Sin dato".
 export function legendItems(scale) {
   const { breaks, colors } = scale;
   const items = [];

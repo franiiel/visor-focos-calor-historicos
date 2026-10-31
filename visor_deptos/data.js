@@ -1,4 +1,4 @@
-// Pure data helpers for the viewer (no DOM), tested with node:test.
+// Funciones puras de datos para el visor (sin DOM), probadas con node:test.
 
 const MONTH_NAMES = [
   'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -14,10 +14,10 @@ function toNumber(text) {
   return Number.isFinite(n) ? n : null;
 }
 
-// Parses one monthly CSV into Map<in1, {value, anomaly}>, reading the column names
-// given by config.json (`columns: {value, anomaly}`, lowercase).
-// in1 stays a string so the leading zero is preserved; rows with an invalid code
-// are skipped, and empty or non-numeric values become null ("sin dato").
+// Interpreta un CSV mensual como Map<in1, {value, anomaly}>, leyendo los nombres de columna
+// indicados en config.json (`columns: {value, anomaly}`, en minúsculas).
+// in1 se mantiene como cadena para conservar el cero inicial; las filas con un código inválido
+// se omiten, y los valores vacíos o no numéricos pasan a ser null ("sin dato").
 export function parseMonthCsv(text, columns) {
   const expected = `in1,${columns.value},${columns.anomaly}`;
   const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim() !== '');
@@ -50,8 +50,8 @@ export function monthLabel(aaaamm) {
   return `${MONTH_NAMES[month - 1]} ${year}`;
 }
 
-// Sequences async requests so only the latest one may apply its result:
-// take a token with next() before awaiting, then check isCurrent(token) after.
+// Ordena las solicitudes asíncronas para que solo la última pueda aplicar su resultado:
+// se toma un token con next() antes del await y después se verifica isCurrent(token).
 export function createLatestGuard() {
   let latest = 0;
   return {

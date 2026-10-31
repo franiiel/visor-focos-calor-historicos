@@ -1,6 +1,6 @@
 <?php
-// Plain-PHP tests for visor_deptos/lib/actualizar_mes.php (no framework).
-// Run: php tools/test/actualizar_mes_test.php  -> exit code 0 when every check passes.
+// Pruebas en PHP plano para visor_deptos/lib/actualizar_mes.php (sin framework).
+// Ejecución: php tools/test/actualizar_mes_test.php  -> código de salida 0 cuando pasan todas las verificaciones.
 
 require __DIR__ . '/../../visor_deptos/lib/actualizar_mes.php';
 
@@ -24,7 +24,7 @@ function square($x0, $y0, $x1, $y1)
     return [[$x0, $y0], [$x1, $y0], [$x1, $y1], [$x0, $y1], [$x0, $y0]];
 }
 
-// ---------- Geometry and class (same cases as the Node tests) ----------
+// ---------- Geometría y clase (mismos casos que las pruebas de Node) ----------
 
 $rings = [square(0, 0, 4, 4), square(1, 1, 2, 2)];
 check('inside', monthly_in_polygon(0.5, 0.5, $rings));
@@ -51,7 +51,7 @@ check('class rule from 5 down', array_map(function ($v) use ($stats) {
 check('upper edge of the normal band is normal', monthly_anomaly_class(11, ['max' => 20, 'mean' => 10, 'min' => 0]) === 3);
 check('never any hotspot: zero is class 1', monthly_anomaly_class(0, ['max' => 0, 'mean' => 0, 'min' => 0]) === 1);
 
-// ---------- Months and download windows ----------
+// ---------- Meses y ventanas de descarga ----------
 
 check('previous month', monthly_previous_month(new DateTimeImmutable('2026-01-02')) === '202512');
 check('windows of at most 5 days cover the month', monthly_windows('202602') === [
@@ -93,7 +93,7 @@ $config = json_decode(file_get_contents(__DIR__ . '/../../visor_deptos/config.js
 $config['climatology'] = ['from' => '200101', 'to' => '200212'];
 file_put_contents("$dir/config.json", json_encode($config));
 file_put_contents("$dir/geo.json", json_encode($geo));
-// Reference January: 06021 has 2 and 4 (max 4, mean 3, min 2); 22007 has 1 and 0.
+// Referencia de enero: 06021 tiene 2 y 4 (max 4, mean 3, min 2); 22007 tiene 1 y 0.
 file_put_contents("$dir/datos/focos_200101.csv", "in1,focos,anomalia\n06021,2,1\n22007,1,4\n");
 file_put_contents("$dir/datos/focos_200201.csv", "in1,focos,anomalia\n06021,4,4\n22007,0,1\n");
 file_put_contents("$dir/datos/focos_200202.csv", "in1,focos,anomalia\n06021,0,1\n22007,0,1\n");
@@ -102,8 +102,8 @@ $row = function ($lat, $lon, $date) {
     return "$lat,$lon,300,1,1,$date,0100,Terra,MODIS,50,6.1NRT,280,10,N\n";
 };
 file_put_contents("$dir/focos.csv", $header . str_repeat($row(0.5, 0.5, '2003-01-10'), 5)
-    . $row(9, 9, '2003-01-10')        // outside every department
-    . $row(0.5, 1.1, '2003-02-01'));  // another month: ignored
+    . $row(9, 9, '2003-01-10')        // fuera de todo departamento
+    . $row(0.5, 1.1, '2003-02-01'));  // otro mes: se ignora
 $base = ['--geojson', "$dir/geo.json", '--config', "$dir/config.json", '--datos', "$dir/datos"];
 
 list($code, $out) = run_cli(array_merge($base, ['--mes', '200301', '--csv', "$dir/focos.csv"]));
@@ -112,10 +112,10 @@ check('every department, 0 when no hotspots, classified', @file_get_contents("$d
 check('log names the month, assigned and dropped', strpos($out, '200301') !== false && strpos($out, '5 assigned') !== false && strpos($out, '1 outside') !== false);
 check('no temporary file left', !glob("$dir/datos/*.tmp"));
 
-// Rerunning a month inside the climatology uses its new counts, not its old file.
+// Volver a procesar un mes dentro de la climatología usa sus nuevos conteos, no su archivo anterior.
 file_put_contents("$dir/focos02.csv", $header . str_repeat($row(0.5, 0.5, '2002-01-05'), 3));
 run_cli(array_merge($base, ['--mes', '200201', '--csv', "$dir/focos02.csv"]));
-// January reference is now 2 and 3: 3 > max 3 is false, 3 > 2.75 -> class 4.
+// La referencia de enero ahora es 2 y 3: 3 > max 3 es falso, 3 > 2.75 -> clase 4.
 check('rerun inside the climatology', @file_get_contents("$dir/datos/focos_200201.csv") === "in1,focos,anomalia\n06021,3,4\n22007,0,1\n");
 
 $before = scandir("$dir/datos");

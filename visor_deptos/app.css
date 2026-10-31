@@ -1,4 +1,4 @@
-/* Department heat-hotspot viewer. Plain CSS, mobile first. */
+/* Visor departamental de focos de calor. CSS simple, pensado primero para móviles. */
 
 :root {
   --visor-ink: #222;
@@ -15,7 +15,7 @@ body {
   background: #f4f4f2;
 }
 
-/* Placeholder SEPA header/footer (replaced on integration). */
+/* Encabezado y pie de página provisorios de SEPA (se reemplazan en la integración). */
 .sepa-header { background: #1f4e3d; color: #fff; padding: 0.6rem 1rem; }
 .sepa-header-inner { display: flex; gap: 0.75rem; align-items: baseline; flex-wrap: wrap; }
 .sepa-logo { font-weight: 700; font-size: 1.3rem; letter-spacing: 0.05em; }
@@ -101,7 +101,7 @@ body {
 
 .visor-note { color: var(--visor-muted); font-size: 0.85rem; margin-top: 1rem; }
 
-/* Wide screens: map and panel side by side, legend floating over the map. */
+/* Pantallas anchas: mapa y panel lado a lado, leyenda flotando sobre el mapa. */
 @media (min-width: 900px) {
   .visor-layout { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
   .visor-legend {

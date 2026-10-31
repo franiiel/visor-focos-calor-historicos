@@ -1,6 +1,6 @@
-// Department viewer (ES module) for the dataset described in config.json, which
-// index.php embeds as #visor-config. Leaflet (L) and Chart.js (Chart) are loaded as
-// pinned UMD scripts by index.php.
+// Visor departamental (módulo ES) del conjunto de datos descrito en config.json, que
+// index.php incrusta como #visor-config. index.php carga Leaflet (L) y Chart.js (Chart)
+// como scripts UMD con versión fija.
 import { buildScale, colorFor, legendItems, formatNumber, anomalyLabel } from './scales.js';
 import { parseMonthCsv, splitMonth, monthLabel, MONTH_NAMES, createLatestGuard } from './data.js';
 
@@ -17,10 +17,10 @@ function readConfig() {
   }
 }
 
-// The null fallbacks only keep these lines from throwing: init() stops before use
-// when the config is missing.
+// Los valores null de respaldo solo evitan que estas líneas lancen errores: init() se detiene
+// antes de usarlos cuando falta la configuración.
 const config = readConfig();
-// Display rounding only; non-integer values keep full precision in the data.
+// Redondeo solo para mostrar; los valores no enteros conservan la precisión completa en los datos.
 const VALUE_DECIMALS = config && config.integerValues ? 0 : 1;
 const UNIT = config ? config.unit : '';
 const UNIT_TITLE = UNIT.charAt(0).toUpperCase() + UNIT.slice(1);
@@ -42,7 +42,7 @@ const state = {
   chart: null,
 };
 
-// Only the latest month load and the latest department click may touch the UI.
+// Solo la última carga de mes y el último clic en un departamento pueden modificar la interfaz.
 const monthGuard = createLatestGuard();
 const seriesGuard = createLatestGuard();
 
@@ -72,11 +72,11 @@ async function fetchJson(url, what) {
   }
 }
 
-// ---------- Map ----------
+// ---------- Mapa ----------
 
 function createMap(geo) {
   const map = L.map('map', { minZoom: 3, zoomSnap: 0.5 });
-  // Official IGN basemap, same as the SEPA 5-day hotspot viewer (TMS, hence {-y}).
+  // Mapa base oficial del IGN, el mismo del visor de focos de 5 días de SEPA (TMS, de ahí {-y}).
   L.tileLayer(
     'https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png',
     {
@@ -163,7 +163,7 @@ function restyle() {
   $('map-title').textContent = `${layerTitle()} — ${monthLabel(state.month)}`;
 }
 
-// ---------- Month selection ----------
+// ---------- Selección de mes ----------
 
 async function loadMonth(month) {
   if (!state.months.includes(month)) return;
@@ -175,13 +175,13 @@ async function loadMonth(month) {
       if (!res.ok) throw new Error(`No se pudo leer el archivo del mes ${month} (HTTP ${res.status})`);
       rows = parseMonthCsv(await res.text(), config.columns);
     } catch (err) {
-      // A failure of a superseded request is not reported: the newer one owns the UI.
+      // No se informa el fallo de una solicitud reemplazada: la más reciente controla la interfaz.
       if (!monthGuard.isCurrent(token)) return;
       throw err;
     }
     state.monthCache.set(month, rows);
   }
-  // Ignore a late response if another month was selected meanwhile.
+  // Se ignora una respuesta tardía si mientras tanto se seleccionó otro mes.
   if (!monthGuard.isCurrent(token)) return;
   state.month = month;
   state.rows = rows;
@@ -226,7 +226,7 @@ function setupControls() {
   return latest;
 }
 
-// ---------- Department series ----------
+// ---------- Series del departamento ----------
 
 async function selectDepartment(props) {
   state.selected = { in1: props.in1, depto: props.depto, provincia: props.provincia };
@@ -234,14 +234,14 @@ async function selectDepartment(props) {
   $('panel-title').textContent = `${props.depto} (${props.provincia})`;
   $('panel-info').textContent = 'Cargando serie…';
   const token = seriesGuard.next();
-  // Drop the previous department's series so a month change while loading cannot
-  // write its numbers into the panel under the new title.
+  // Se descarta la serie del departamento anterior para que un cambio de mes durante la carga no pueda
+  // escribir sus números en el panel bajo el nuevo título.
   state.series = null;
   let series;
   try {
     series = await fetchJson(`serie.php?in1=${encodeURIComponent(props.in1)}`, 'serie.php');
   } catch (err) {
-    // Ignore a late failure if another department was clicked meanwhile.
+    // Se ignora un fallo tardío si mientras tanto se hizo clic en otro departamento.
     if (!seriesGuard.isCurrent(token)) return;
     state.series = null;
     $('panel-info').textContent = `No se pudo cargar la serie del departamento (${err.message}).`;
@@ -249,7 +249,7 @@ async function selectDepartment(props) {
     state.chart = null;
     return;
   }
-  // Ignore a late response if another department was clicked meanwhile.
+  // Se ignora una respuesta tardía si mientras tanto se hizo clic en otro departamento.
   if (!seriesGuard.isCurrent(token)) return;
   state.series = series;
   renderChart();
@@ -283,7 +283,7 @@ function updatePanelInfo() {
 
 function renderChart() {
   const s = state.series;
-  // Reference: the climatology mean of the same calendar month, repeated along the series.
+  // Referencia: la media climatológica del mismo mes calendario, repetida a lo largo de la serie.
   const reference = s.months.map((m) => (s.clim ? s.clim[splitMonth(m).month - 1] : null));
   if (state.chart) state.chart.destroy();
   state.chart = new Chart($('chart'), {
@@ -349,7 +349,7 @@ function updateChartMarker() {
   updatePanelInfo();
 }
 
-// ---------- Startup ----------
+// ---------- Inicio ----------
 
 async function init() {
   if (!L || !Chart) {

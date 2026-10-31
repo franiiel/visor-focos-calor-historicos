@@ -66,7 +66,7 @@ test('written dataset follows the CSV contract', () => {
     assert.equal(files.length, 308);
     assert.equal(files[0], 'focos_200101.csv');
     assert.equal(files.at(-1), 'focos_202608.csv');
-    // datos/LEEME.txt is versioned, not generated.
+    // datos/LEEME.txt está versionado, no se genera.
     assert.ok(!existsSync(join(out, 'LEEME.txt')));
 
     const expectedCodes = departments.map((d) => d.in1).sort();
@@ -87,7 +87,7 @@ test('written dataset follows the CSV contract', () => {
         assert.match(in1, /^\d{5}$/);
         assert.match(focos, /^\d+$/);
         assert.match(anomalia, /^[1-5]$/);
-        // Inside the 2001-2025 reference no month can exceed its own maximum.
+        // Dentro de la referencia 2001-2025 ningún mes puede superar su propio máximo.
         if (month <= '202512') assert.notEqual(anomalia, '5', `class 5 inside the reference in ${file}`);
         classes.add(anomalia);
         codes.push(in1);

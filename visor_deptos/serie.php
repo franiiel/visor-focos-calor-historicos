@@ -1,9 +1,9 @@
 <?php
-// Monthly series of every department, consolidated from the CSVs in datos/ described
-// by config.json and cached in cache/serie.json (see lib/series.php for the shape).
+// Serie mensual de todos los departamentos, consolidada a partir de los CSV de datos/ descritos
+// en config.json y guardada en caché en cache/serie.json (ver lib/series.php para la estructura).
 //
-// Optional parameter: in1 (exactly 5 digits). When present, returns only that
-// department: { "in1", "months", "value", "anomaly", "clim" }.
+// Parámetro opcional: in1 (exactamente 5 dígitos). Si está presente, devuelve solo ese
+// departamento: { "in1", "months", "value", "anomaly", "clim" }.
 
 require __DIR__ . '/lib/config.php';
 require __DIR__ . '/lib/series.php';
@@ -20,7 +20,7 @@ function serie_error($status, $message)
 
 $in1 = null;
 if (isset($_GET['in1'])) {
-    // \z instead of $ so a trailing newline is rejected too.
+    // \z en lugar de $ para rechazar también un salto de línea final.
     if (!is_string($_GET['in1']) || !preg_match('/^\d{5}\z/', $_GET['in1'])) {
         serie_error(400, 'Parámetro in1 inválido: se esperan 5 dígitos.');
     }
@@ -34,7 +34,7 @@ try {
     error_log('serie.php: ' . $e->getMessage());
     serie_error(500, 'Configuración inválida: config.json.');
 } catch (SeriesCsvException $e) {
-    // Name the file only; the absolute path stays in the server log.
+    // Se nombra solo el archivo; la ruta absoluta queda en el log del servidor.
     error_log('serie.php: ' . $e->getMessage());
     serie_error(500, 'Archivo de datos inválido: ' . $e->csvName
         . ' (se esperan las columnas ' . visor_expected_header($config) . ').');
@@ -48,7 +48,7 @@ if ($in1 === null) {
     exit;
 }
 
-// Decode as objects so "06007"-style keys are kept as strings.
+// Se decodifica como objetos para que las claves del tipo "06007" se conserven como cadenas.
 $all = json_decode($json);
 if (!is_object($all) || !isset($all->data->{$in1})) {
     serie_error(404, 'Departamento sin datos.');

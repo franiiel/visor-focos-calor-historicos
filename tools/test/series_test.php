@@ -1,6 +1,6 @@
 <?php
-// Plain-PHP tests for visor_deptos/lib/series.php and lib/config.php (no framework).
-// Run: php tools/test/series_test.php  -> exit code 0 when every check passes.
+// Pruebas en PHP plano para visor_deptos/lib/series.php y lib/config.php (sin framework).
+// Ejecución: php tools/test/series_test.php  -> código de salida 0 cuando pasan todas las verificaciones.
 
 require __DIR__ . '/../../visor_deptos/lib/config.php';
 require __DIR__ . '/../../visor_deptos/lib/series.php';
@@ -48,7 +48,7 @@ function fingerprint($dataDir, $config)
     return series_data_fingerprint($dataDir, $config);
 }
 
-// Same values as visor_deptos/config.json; the UI texts are irrelevant here.
+// Mismos valores que visor_deptos/config.json; los textos de la UI no importan aquí.
 $cfg = [
     'filePrefix' => 'focos',
     'columns' => ['value' => 'focos', 'anomaly' => 'anomalia'],
@@ -59,7 +59,7 @@ $cfg = [
 $csvA = "in1,focos,anomalia\n06007,10,1.5\n38077,2,-0.5\n";
 $csvB = "in1,focos,anomalia\n06007,20,2.5\n38077,4,-1.0\n";
 
-// --- Normal build shape -------------------------------------------------------
+// --- Forma de la construcción normal ------------------------------------------
 $root = make_dir();
 $data = $root . '/datos';
 write_csv($data, '200101', $csvA);
@@ -74,7 +74,7 @@ check('build: clim January mean', $series['clim']->{'06007'}[0] === 10.0);
 check('build: clim without data is null', $series['clim']->{'06007'}[5] === null);
 remove_dir($root);
 
-// --- Configured dataset -------------------------------------------------------
+// --- Conjunto de datos configurado --------------------------------------------
 $root = make_dir();
 $data = $root . '/datos';
 $viirs = [
@@ -85,7 +85,7 @@ $viirs = [
 ];
 write_csv($data, '200101', "in1,cantidad,anom\n06007,1.25,0.5\n", 'viirs');
 write_csv($data, '200102', "in1,cantidad,anom\n06007,2.5,1\n", 'viirs');
-write_csv($data, '200103', $csvA); // focos_ file: ignored with this prefix
+write_csv($data, '200103', $csvA); // archivo focos_: se ignora con este prefijo
 $series = series_build($data, $viirs);
 check('config: only files with the configured prefix', $series['months'] === ['200101', '200102']);
 check('config: configured columns, decimals kept', $series['data']->{'06007'}['value'] === [1.25, 2.5]);
@@ -104,7 +104,7 @@ try {
 check('config: missing configured column throws naming them', $thrown !== null && strpos($thrown->getMessage(), 'in1,x,y') !== false);
 remove_dir($root);
 
-// --- Fingerprint --------------------------------------------------------------
+// --- Huella -------------------------------------------------------------------
 $root = make_dir();
 $data = $root . '/datos';
 $path = write_csv($data, '200101', $csvA);
@@ -127,7 +127,7 @@ unlink($extra);
 check('fingerprint: back to base when the file is removed', fingerprint($data, $cfg) === $fpBase);
 remove_dir($root);
 
-// --- Cache behaviour ----------------------------------------------------------
+// --- Comportamiento del caché -------------------------------------------------
 $root = make_dir();
 $data = $root . '/datos';
 $cache = $root . '/cache/serie.json';
@@ -138,7 +138,7 @@ $json1 = series_cached_json($data, $cache, $cfg);
 check('cache: first call returns the built series', json_decode($json1)->data->{'06007'}->value === [10]);
 check('cache: file written', is_file($cache));
 
-// Tamper with the cached payload only; a reused cache returns the tampered value.
+// Se altera solo el contenido en caché; un caché reutilizado devuelve el valor alterado.
 $raw = file_get_contents($cache);
 file_put_contents($cache, str_replace('"value":[10]', '"value":[777]', $raw));
 $json2 = series_cached_json($data, $cache, $cfg);
@@ -147,18 +147,18 @@ check('cache: reused when nothing changed', strpos($json2, '[777]') !== false);
 $json2b = series_cached_json($data, $cache, ['integerValues' => false] + $cfg);
 check('cache: rebuilt when the config changes', strpos($json2b, '[777]') === false);
 
-// Same mtime, different content (and size): must rebuild.
+// Mismo mtime, contenido (y tamaño) distinto: debe reconstruirse.
 write_csv($data, '200101', $csvB . "02007,1,0\n");
 touch($path, $mtime);
 @touch($data, $mtime);
-touch($cache, $mtime + 5); // cache looks newer than every CSV
+touch($cache, $mtime + 5); // el caché parece más nuevo que todos los CSV
 clearstatcache();
 $json3 = series_cached_json($data, $cache, $cfg);
 check('cache: rebuilt when a CSV changes with the same mtime', json_decode($json3)->data->{'06007'}->value === [20]);
 check('cache: served JSON is plain series JSON', is_array(json_decode($json3, true)['months'] ?? null));
 remove_dir($root);
 
-// --- Bad header ---------------------------------------------------------------
+// --- Encabezado inválido ------------------------------------------------------
 $root = make_dir();
 $data = $root . '/datos';
 $cache = $root . '/cache/serie.json';
@@ -176,7 +176,7 @@ check('bad header: message does not expose the directory', $thrown !== null && s
 check('bad header: no cache written', !is_file($cache));
 remove_dir($root);
 
-// --- Config file --------------------------------------------------------------
+// --- Archivo de configuración -------------------------------------------------
 $real = visor_config(__DIR__ . '/../../visor_deptos/config.json');
 check('config.json: loads and matches the SEPA contract',
     $real['filePrefix'] === 'focos' && $real['columns'] === ['value' => 'focos', 'anomaly' => 'anomalia']);
@@ -232,10 +232,10 @@ foreach ($invalid as $case => $change) {
 remove_dir($root);
 
 // --- Endpoints ----------------------------------------------------------------
-// listar.php and serie.php run as subprocesses on a copy of the viewer with fixture
-// data; the CLI keeps the code set by http_response_code(), reported on stderr.
+// listar.php y serie.php se ejecutan como subprocesos sobre una copia del visor con datos
+// de fixture; el CLI conserva el código fijado por http_response_code(), informado en stderr.
 
-/** Runs $script with $query as $_GET; returns [HTTP status, stdout]. */
+/** Ejecuta $script con $query como $_GET; devuelve [estado HTTP, stdout]. */
 function run_endpoint($dir, $script, $query = '')
 {
     $runner = $dir . '/run_endpoint.php';

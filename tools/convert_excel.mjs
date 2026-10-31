@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-// Converts SEPA's department workbook (ESTADISTICAS-DEPARTAMENTALES*.xlsx) into the
-// viewer's monthly CSVs: datos/<filePrefix>_AAAAMM.csv with `in1,<value>,<anomaly>`.
+// Convierte el libro departamental de SEPA (ESTADISTICAS-DEPARTAMENTALES*.xlsx) en los
+// CSV mensuales del visor: datos/<filePrefix>_AAAAMM.csv con `in1,<value>,<anomaly>`.
 //
-// Usage:
+// Uso:
 //   node tools/convert_excel.mjs --xlsx ESTADISTICAS-DEPARTAMENTALES2026.xlsx
 //        [--config visor_deptos/config.json] [--out visor_deptos/datos]
 //
-// Reads two sheets: FCXMESXAÑO (hotspots per year, province and department name, one
-// column per month) and ESTADISTICAS (COD_PROV + COD_DEPTO per name). The anomaly is
-// SEPA's class 1-5 (see VISOR_FOCOS.md), computed against the config.json climatology.
-// Node stdlib only: the .xlsx zip and its XML are read directly.
+// Lee dos hojas: FCXMESXAÑO (focos por año, nombre de provincia y de departamento, una
+// columna por mes) y ESTADISTICAS (COD_PROV + COD_DEPTO por nombre). La anomalía es
+// la clase 1-5 de SEPA (ver VISOR_FOCOS.md), calculada respecto de la climatología de config.json.
+// Solo la biblioteca estándar de Node: el zip .xlsx y su XML se leen directamente.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -21,9 +21,9 @@ const HISTORY_SHEET = 'FCXMESXAÑO';
 const CODES_SHEET = 'ESTADISTICAS';
 const MONTH_HEADERS = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 
-// ---------- .xlsx reading ----------
+// ---------- Lectura del .xlsx ----------
 
-// Returns Map<entry name, Buffer> for a zip without zip64 or encryption.
+// Devuelve Map<nombre de entrada, Buffer> para un zip sin zip64 ni cifrado.
 function readZip(buf) {
   let end = buf.length - 22;
   while (end >= 0 && buf.readUInt32LE(end) !== 0x06054b50) end -= 1;
@@ -62,7 +62,7 @@ function colIndex(ref) {
   return [...ref.replace(/\d+/g, '')].reduce((a, c) => a * 26 + c.charCodeAt(0) - 64, 0) - 1;
 }
 
-// Returns { [sheetName]: rows }, where a row is an array of cell texts ('' when empty).
+// Devuelve { [sheetName]: rows }, donde una fila es un arreglo de textos de celda ('' si está vacía).
 export function readXlsxSheets(buf, names) {
   const zip = readZip(buf);
   const read = (path) => zip.get(path)?.toString('utf8');
@@ -91,10 +91,10 @@ export function readXlsxSheets(buf, names) {
   return result;
 }
 
-// ---------- Classes ----------
+// ---------- Clases ----------
 
-// SEPA's rule: SI(fc>MAX;5;SI(fc>MD+10%;4;SI(fc>MD-10%;3;SI(fc>MIN;2;1)))).
-// The band uses the workbook's arithmetic (MD*10/100) so edge cases match it.
+// Regla de SEPA: SI(fc>MAX;5;SI(fc>MD+10%;4;SI(fc>MD-10%;3;SI(fc>MIN;2;1)))).
+// La banda usa la aritmética del libro (MD*10/100) para que los casos límite coincidan con él.
 export function anomalyClass(focos, { max, mean, min }) {
   const tenth = (mean * 10) / 100;
   if (focos > max) return 5;
@@ -104,8 +104,8 @@ export function anomalyClass(focos, { max, mean, min }) {
   return 1;
 }
 
-// Reference statistics of the values present for one department and calendar month.
-// std is the sample standard deviation, as Excel's STDEV (null with a single value).
+// Estadísticas de referencia de los valores presentes para un departamento y mes calendario.
+// std es la desviación estándar muestral, como STDEV de Excel (null con un único valor).
 export function referenceStats(values) {
   if (!values.length) return null;
   const mean = values.reduce((a, b) => a + b, 0) / values.length;
@@ -113,9 +113,9 @@ export function referenceStats(values) {
   return { max: Math.max(...values), mean, min: Math.min(...values), std };
 }
 
-// series: Map<in1, Map<AAAAMM, value>>. Returns { byMonth: Map<AAAAMM, [[in1, value,
-// class|null], ...]> sorted by month and in1, reference: Map<in1, [12 × stats|null]> }.
-// The reference of each calendar month uses the values inside the climatology period.
+// series: Map<in1, Map<AAAAMM, value>>. Devuelve { byMonth: Map<AAAAMM, [[in1, value,
+// class|null], ...]> ordenado por mes e in1, reference: Map<in1, [12 × stats|null]> }.
+// La referencia de cada mes calendario usa los valores dentro del período de climatología.
 export function classifySeries(series, climatology) {
   const result = new Map();
   const references = new Map();
@@ -136,14 +136,14 @@ export function classifySeries(series, climatology) {
 }
 
 // history: [{ year, prov, depto, values: [12 × number|null] }]; codes: Map<"PROV|DEPTO", in1>.
-// Returns { byMonth: Map<AAAAMM, [[in1, focos, class|null], ...]> sorted by month and
-// in1, skipped: ["in1 PROV / DEPTO year (n rows)", ...] }. A department without a row
-// (or an empty cell) has no row that month, and the reference statistics use only the
-// years that have a value, as the workbook does. A department with more than one row
-// for a year is ambiguous (the workbook has rows with a mistyped year), so that year
-// is left without data and reported instead of guessing which row is right.
+// Devuelve { byMonth: Map<AAAAMM, [[in1, focos, class|null], ...]> ordenado por mes e
+// in1, skipped: ["in1 PROV / DEPTO year (n rows)", ...] }. Un departamento sin fila
+// (o con una celda vacía) no tiene fila ese mes, y las estadísticas de referencia usan solo los
+// años que tienen valor, como hace el libro. Un departamento con más de una fila
+// para un año es ambiguo (el libro tiene filas con el año mal escrito), así que ese año
+// queda sin datos y se informa en lugar de adivinar cuál fila es la correcta.
 export function buildMonthlyRows(history, codes, climatology) {
-  const rowsByYear = new Map(); // "in1|year" -> rows
+  const rowsByYear = new Map(); // "in1|year" -> filas
   const unknown = new Set();
   for (const row of history) {
     const in1 = codes.get(`${row.prov}|${row.depto}`);
@@ -174,7 +174,7 @@ export function buildMonthlyRows(history, codes, climatology) {
   return { byMonth: classifySeries(series, climatology).byMonth, skipped: skipped.sort() };
 }
 
-// ---------- Workbook -> CSV files ----------
+// ---------- Libro -> archivos CSV ----------
 
 function columns(header, wanted, sheet) {
   return wanted.map((name) => {
@@ -191,7 +191,7 @@ function count(text, where) {
   return n;
 }
 
-// Returns { files: [{ name, content }] for every month, skipped } (see buildMonthlyRows).
+// Devuelve { files: [{ name, content }] para cada mes, skipped } (ver buildMonthlyRows).
 export function convertWorkbook(buf, config) {
   const sheets = readXlsxSheets(buf, [HISTORY_SHEET, CODES_SHEET]);
 
@@ -199,7 +199,7 @@ export function convertWorkbook(buf, config) {
   const [iProvCode, iDeptoCode, iProvName, iDeptoName] = columns(codeHeader, ['COD_PROV', 'COD_DEPTO', 'PROV', 'DEPTO'], CODES_SHEET);
   const codes = new Map();
   for (const r of codeRows) {
-    if (!/^\d{1,2}$/.test(r[iProvCode] ?? '') || !/^\d{1,3}$/.test(r[iDeptoCode] ?? '')) continue; // totals, blanks
+    if (!/^\d{1,2}$/.test(r[iProvCode] ?? '') || !/^\d{1,3}$/.test(r[iDeptoCode] ?? '')) continue; // totales, en blanco
     codes.set(`${r[iProvName]}|${r[iDeptoName]}`, r[iProvCode].padStart(2, '0') + r[iDeptoCode].padStart(3, '0'));
   }
 
@@ -218,7 +218,7 @@ export function convertWorkbook(buf, config) {
   return { files: monthFiles(byMonth, config), skipped };
 }
 
-// byMonth (see classifySeries) -> [{ name: '<filePrefix>_AAAAMM.csv', content }].
+// byMonth (ver classifySeries) -> [{ name: '<filePrefix>_AAAAMM.csv', content }].
 export function monthFiles(byMonth, config) {
   const header = `in1,${config.columns.value},${config.columns.anomaly}`;
   return [...byMonth].map(([month, rows]) => ({
@@ -246,7 +246,7 @@ function parseArgs(argv) {
 
 function main() {
   const opts = parseArgs(process.argv.slice(2));
-  // Strip a UTF-8 BOM, as lib/config.php does.
+  // Se quita un BOM UTF-8, como hace lib/config.php.
   const config = JSON.parse(readFileSync(resolve(opts.config), 'utf8').replace(/^﻿/, ''));
   const { files, skipped } = convertWorkbook(readFileSync(resolve(opts.xlsx)), config);
   const out = resolve(opts.out);

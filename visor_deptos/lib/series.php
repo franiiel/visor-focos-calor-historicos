@@ -1,17 +1,17 @@
 <?php
-// Consolidates the monthly CSVs (datos/<filePrefix>_AAAAMM.csv) into one series object
-// and caches it as JSON. $config is the array returned by visor_config(), so callers
-// load lib/config.php first.
-// PHP 7.4+ compatible, no dependencies.
+// Consolida los CSV mensuales (datos/<filePrefix>_AAAAMM.csv) en un único objeto de serie
+// y lo guarda en caché como JSON. $config es el arreglo que devuelve visor_config(), por lo que quien lo llame
+// debe cargar lib/config.php primero.
+// Compatible con PHP 7.4+, sin dependencias.
 //
-// Consolidated shape (all arrays aligned to "months"):
+// Estructura consolidada (todos los arreglos alineados con "months"):
 // {
 //   "months": ["200101", ...],
 //   "data":   { "06007": { "value": [number|null, ...], "anomaly": [float|null, ...] } },
-//   "clim":   { "06007": [12 means of value over the climatology period, null if no data] }
+//   "clim":   { "06007": [12 medias de value en el período de climatología, null si no hay datos] }
 // }
 
-/** A monthly CSV that cannot be used. $csvName is the base name only (no directory). */
+/** Un CSV mensual inutilizable. $csvName es solo el nombre base (sin directorio). */
 class SeriesCsvException extends RuntimeException
 {
     public $csvName;
@@ -24,9 +24,9 @@ class SeriesCsvException extends RuntimeException
 }
 
 /**
- * Returns [[AAAAMM, path], ...] sorted by month, with the month as a string. Pairs
- * instead of AAAAMM keys because PHP turns numeric string keys into ints.
- * $prefix is validated by visor_config().
+ * Devuelve [[AAAAMM, path], ...] ordenado por mes, con el mes como cadena. Se usan pares
+ * en lugar de claves AAAAMM porque PHP convierte las claves de cadena numéricas en enteros.
+ * $prefix lo valida visor_config().
  */
 function series_list_csv($dataDir, $prefix)
 {
@@ -42,7 +42,7 @@ function series_list_csv($dataDir, $prefix)
     return $files;
 }
 
-/** Converts a CSV cell to int/float, or null when empty or not numeric. */
+/** Convierte una celda CSV a int/float, o a null cuando está vacía o no es numérica. */
 function series_number($text, $asInt)
 {
     $text = trim((string) $text);
@@ -53,10 +53,10 @@ function series_number($text, $asInt)
 }
 
 /**
- * Parses one monthly CSV into [in1 => [value, anomaly]], reading the configured columns.
- * Throws SeriesCsvException (naming only the file, not its directory) when the file
- * cannot be read or lacks a required column, so a broken export is never cached
- * as an empty month.
+ * Interpreta un CSV mensual como [in1 => [value, anomaly]], leyendo las columnas configuradas.
+ * Lanza SeriesCsvException (que nombra solo el archivo, no su directorio) cuando el archivo
+ * no se puede leer o le falta una columna obligatoria, para que una exportación defectuosa nunca se guarde en caché
+ * como un mes vacío.
  */
 function series_parse_csv($path, $config)
 {
@@ -75,7 +75,7 @@ function series_parse_csv($path, $config)
         throw new SeriesCsvException($name, "$name has no header (expected $expected)");
     }
     $header = array_map(function ($h) {
-        // Strip a UTF-8 BOM and spaces, compare case-insensitively.
+        // Se quitan el BOM UTF-8 y los espacios, y se compara sin distinguir mayúsculas.
         return strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $h)));
     }, $header);
     $iIn1 = array_search('in1', $header, true);
@@ -99,7 +99,7 @@ function series_parse_csv($path, $config)
     return $rows;
 }
 
-/** Builds the consolidated series array from every CSV in $dataDir. */
+/** Construye el arreglo de la serie consolidada a partir de todos los CSV de $dataDir. */
 function series_build($dataDir, $config)
 {
     $files = series_list_csv($dataDir, $config['filePrefix']);
@@ -117,7 +117,7 @@ function series_build($dataDir, $config)
             $codes[(string) $in1] = true;
         }
     }
-    // Pad back to 5 chars: codes without a leading zero become int keys in PHP arrays.
+    // Se vuelve a completar a 5 caracteres: los códigos sin cero inicial se convierten en claves enteras en los arreglos de PHP.
     $codeList = array_map(function ($c) {
         return str_pad((string) $c, 5, '0', STR_PAD_LEFT);
     }, array_keys($codes));
@@ -148,7 +148,7 @@ function series_build($dataDir, $config)
         for ($m = 0; $m < 12; $m++) {
             $means[] = $cnt[$m] > 0 ? round($sum[$m] / $cnt[$m], 2) : null;
         }
-        // stdClass properties keep "06007"-style keys as strings in json_encode.
+        // Las propiedades de stdClass conservan las claves del tipo "06007" como cadenas en json_encode.
         $data->{$in1} = ['value' => $values, 'anomaly' => $anom];
         $clim->{$in1} = $means;
     }
@@ -156,12 +156,12 @@ function series_build($dataDir, $config)
 }
 
 /**
- * Fingerprint of the config and the data directory: sha1 over the config and the sorted
- * "name:size:mtime" of every monthly CSV. Any config.json edit rebuilds the cache, even
- * one that only changes a UI text; that is cheap and keeps the rule simple.
- * Unlike a plain mtime comparison (1-second resolution), it also changes when a file
- * is rewritten within the same second with a different size, or when a file is added
- * or removed (including files copied with an old preserved mtime).
+ * Huella de la configuración y del directorio de datos: sha1 sobre la configuración y los
+ * "name:size:mtime" ordenados de cada CSV mensual. Cualquier edición de config.json reconstruye la caché, incluso
+ * una que solo cambia un texto de la interfaz; es barato y mantiene simple la regla.
+ * A diferencia de una simple comparación de mtime (resolución de 1 segundo), también cambia cuando un archivo
+ * se reescribe dentro del mismo segundo con otro tamaño, o cuando se agrega
+ * o se quita un archivo (incluidos los archivos copiados que conservan un mtime antiguo).
  */
 function series_data_fingerprint($dataDir, $config)
 {
@@ -174,11 +174,11 @@ function series_data_fingerprint($dataDir, $config)
 }
 
 /**
- * Returns the consolidated series as a JSON string. The cache file holds the data
- * fingerprint on its first line and the JSON after it; it is served only when the
- * stored fingerprint equals the current one. The fingerprint is taken before the
- * CSVs are read, so a file changed during a build makes the next request rebuild.
- * If the cache cannot be written, the freshly built JSON is still returned.
+ * Devuelve la serie consolidada como cadena JSON. El archivo de caché guarda la huella
+ * de los datos en su primera línea y el JSON a continuación; se sirve solo cuando la
+ * huella almacenada es igual a la actual. La huella se toma antes de leer los
+ * CSV, así que un archivo modificado durante una construcción hace que la siguiente solicitud reconstruya.
+ * Si no se puede escribir la caché, igual se devuelve el JSON recién construido.
  */
 function series_cached_json($dataDir, $cacheFile, $config)
 {
@@ -194,18 +194,18 @@ function series_cached_json($dataDir, $cacheFile, $config)
         }
     }
 
-    // series_build throws on a broken CSV, so a partial result is never cached.
+    // series_build lanza una excepción ante un CSV defectuoso, así que nunca se guarda en caché un resultado parcial.
     $json = json_encode(series_build($dataDir, $config));
     if ($json === false) {
         throw new RuntimeException('json_encode failed: ' . json_last_error_msg());
     }
 
-    // Atomic write: temp file in the same directory, then rename over the cache.
+    // Escritura atómica: archivo temporal en el mismo directorio y luego rename sobre la caché.
     $dir = dirname($cacheFile);
     if (!is_dir($dir)) {
         @mkdir($dir, 0755, true);
     }
-    // tempnam silently falls back to the system temp dir, so check writability first.
+    // tempnam recurre en silencio al directorio temporal del sistema, así que primero se verifica que se pueda escribir.
     $tmp = is_writable($dir) ? @tempnam($dir, 'serie_') : false;
     if ($tmp !== false && file_put_contents($tmp, $fingerprint . "\n" . $json) !== false) {
         @chmod($tmp, 0644);

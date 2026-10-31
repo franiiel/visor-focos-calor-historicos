@@ -1,16 +1,16 @@
 <?php
-// Monthly update, run by cron: computes datos/<filePrefix>_AAAAMM.csv for one month from
-// NASA FIRMS MODIS hotspots, with the same rules as tools/compute_anomalies.mjs (see
-// VISOR_FOCOS.md): every point counts, point in polygon against the full
-// DEPTOS-PROV.geojson, 0 for departments without points, SEPA's class 1-5 against the
-// same calendar month of the config.json climatology, read from the CSVs in datos/.
+// Actualización mensual, ejecutada por cron: calcula datos/<filePrefix>_AAAAMM.csv de un mes a partir de
+// los focos MODIS de NASA FIRMS, con las mismas reglas que tools/compute_anomalies.mjs (ver
+// VISOR_FOCOS.md): cuenta cada punto, punto en polígono contra el
+// DEPTOS-PROV.geojson completo, 0 para los departamentos sin puntos, clase 1-5 de SEPA respecto del
+// mismo mes calendario de la climatología de config.json, leída de los CSV de datos/.
 //
-// Usage (CLI only):
+// Uso (solo CLI):
 //   FIRMS_MAP_KEY=... php lib/actualizar_mes.php --geojson /path/DEPTOS-PROV.geojson
 //       [--mes AAAAMM] [--source MODIS_NRT] [--csv local.csv] [--config ../config.json] [--datos ../datos]
 //
-// --mes defaults to the previous month. --csv reads a local FIRMS CSV instead of the API.
-// On any error it exits 1 and writes nothing. PHP 7.4+ compatible, no dependencies.
+// --mes toma por defecto el mes anterior. --csv lee un CSV local de FIRMS en lugar de la API.
+// Ante cualquier error termina con código 1 y no escribe nada. Compatible con PHP 7.4+, sin dependencias.
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
@@ -21,12 +21,12 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/series.php';
 
 const MONTHLY_FIRMS_API = 'https://firms.modaps.eosdis.nasa.gov/api/area/csv';
-// west,south,east,north: mainland Argentina, Tierra del Fuego and Malvinas.
+// oeste,sur,este,norte: Argentina continental, Tierra del Fuego y Malvinas.
 const MONTHLY_BBOX = '-73.6,-55.1,-53.6,-21.7';
 
-// ---------- Point in polygon ----------
+// ---------- Punto en polígono ----------
 
-/** Even-odd ray casting over every ring, so holes are excluded. */
+/** Ray casting par-impar sobre todos los anillos, de modo que los huecos quedan excluidos. */
 function monthly_in_polygon($x, $y, $rings)
 {
     $inside = false;
@@ -43,7 +43,7 @@ function monthly_in_polygon($x, $y, $rings)
     return $inside;
 }
 
-/** Returns [[in1, [[bbox, rings], ...]], ...] sorted by in1, one entry per department. */
+/** Devuelve [[in1, [[bbox, rings], ...]], ...] ordenado por in1, una entrada por departamento. */
 function monthly_departments($geojson)
 {
     $byCode = [];
@@ -68,7 +68,7 @@ function monthly_departments($geojson)
     return $depts;
 }
 
-// ponytail: linear scan with a bbox prefilter (one month is ~30k points); add a grid index if it gets slow.
+// ponytail: recorrido lineal con prefiltro por bbox (un mes son ~30k puntos); agregar un índice de grilla si se vuelve lento.
 function monthly_find_department($depts, $lon, $lat)
 {
     foreach ($depts as list($in1, $parts)) {
@@ -81,9 +81,9 @@ function monthly_find_department($depts, $lon, $lat)
     return null;
 }
 
-// ---------- Class ----------
+// ---------- Clase ----------
 
-/** SEPA's rule, with the workbook's arithmetic (MD*10/100), as anomalyClass() in tools/. */
+/** La regla de SEPA, con la aritmética de la planilla (MD*10/100), igual que anomalyClass() en tools/. */
 function monthly_anomaly_class($value, $s)
 {
     $tenth = $s['mean'] * 10 / 100;
@@ -94,14 +94,14 @@ function monthly_anomaly_class($value, $s)
     return 1;
 }
 
-// ---------- Months and FIRMS data ----------
+// ---------- Meses y datos de FIRMS ----------
 
 function monthly_previous_month(DateTimeImmutable $today)
 {
     return $today->modify('first day of last month')->format('Ym');
 }
 
-/** [[AAAA-MM-DD, days], ...]: the FIRMS API returns at most 5 days per request. */
+/** [[AAAA-MM-DD, días], ...]: la API de FIRMS devuelve como máximo 5 días por solicitud. */
 function monthly_windows($month)
 {
     $first = DateTimeImmutable::createFromFormat('!Ymd', $month . '01');
@@ -113,7 +113,7 @@ function monthly_windows($month)
     return $windows;
 }
 
-/** Returns [[lat, lon], ...] of the points of $month (AAAAMM) in a FIRMS CSV text. */
+/** Devuelve [[lat, lon], ...] de los puntos de $month (AAAAMM) en un texto CSV de FIRMS. */
 function monthly_parse_firms($text, $month)
 {
     $lines = preg_split('/\r?\n/', trim($text));
@@ -142,7 +142,7 @@ function monthly_parse_firms($text, $month)
     return $points;
 }
 
-/** Downloads $month from the FIRMS area API, one request per window. */
+/** Descarga $month desde la API de área de FIRMS, una solicitud por ventana. */
 function monthly_download($month, $source, $key)
 {
     $points = [];
@@ -152,7 +152,7 @@ function monthly_download($month, $source, $key)
         $text = @file_get_contents($url, false, $context);
         $status = isset($http_response_header[0]) ? $http_response_header[0] : null;
         if ($text === false || $status === null || strpos($status, ' 200') === false) {
-            // The URL carries the MAP_KEY: never print it.
+            // La URL lleva la MAP_KEY: nunca debe imprimirse.
             $reason = $status ?? str_replace($key, '***', (string) (error_get_last()['message'] ?? 'no response'));
             if (!extension_loaded('openssl')) {
                 $reason .= ' (the openssl extension is not loaded: PHP cannot open https URLs)';
@@ -164,13 +164,13 @@ function monthly_download($month, $source, $key)
     return $points;
 }
 
-// ---------- Monthly file ----------
+// ---------- Archivo mensual ----------
 
 /**
- * Counts $points per department and classifies the month. The reference uses the same
- * calendar month of the climatology from the CSVs in $dataDir, except $month's own file:
- * its new counts are used instead when it is inside the climatology.
- * Returns [csv text, assigned, outside].
+ * Cuenta $points por departamento y clasifica el mes. La referencia usa el mismo
+ * mes calendario de la climatología a partir de los CSV de $dataDir, salvo el propio archivo de $month:
+ * en su lugar se usan sus conteos nuevos cuando está dentro de la climatología.
+ * Devuelve [texto csv, asignados, fuera].
  */
 function monthly_build($points, $month, $depts, $dataDir, $config)
 {
@@ -269,7 +269,7 @@ function monthly_main($argv)
             $points = monthly_download($month, $opts['source'], $key);
             $origin = $opts['source'];
         }
-        // The full geometry is ~13 MB of JSON, more than a default 128M limit holds once decoded.
+        // La geometría completa ocupa ~13 MB de JSON, más de lo que admite un límite predeterminado de 128M una vez decodificada.
         ini_set('memory_limit', '1G');
         $geojson = json_decode((string) @file_get_contents($opts['geojson']), true);
         if (!is_array($geojson) || !isset($geojson['features'])) {

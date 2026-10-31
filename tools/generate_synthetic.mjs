@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-// Generates SYNTHETIC monthly heat-hotspot CSVs for the prototype viewer.
-// The numbers are invented test data with a plausible shape; they are not real hotspots.
+// Genera CSV mensuales SINTÉTICOS de focos de calor para el visor prototipo.
+// Los números son datos de prueba inventados con una forma verosímil; no son focos reales.
 //
-// Usage:
+// Uso:
 //   node tools/generate_synthetic.mjs [--geo visor_deptos/deptos.geo.json]
 //        [--out visor_deptos/datos] [--from 200101] [--to 202608] [--seed 20260908]
 //
-// Output contract (same as SEPA's real files): datos/focos_AAAAMM.csv with header
-// `in1,focos,anomalia`, one row per department. anomalia is SEPA's class 1-5 against
-// the same department and calendar month over 2001-2025, computed like the converter.
+// Contrato de salida (igual que los archivos reales de SEPA): datos/focos_AAAAMM.csv con encabezado
+// `in1,focos,anomalia`, una fila por departamento. anomalia es la clase 1-5 de SEPA respecto del
+// mismo departamento y mes calendario en 2001-2025, calculada igual que en el conversor.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -32,7 +32,7 @@ export function mulberry32(seed) {
 }
 
 function gaussian(rand) {
-  // Box-Muller; 1 - rand() avoids log(0).
+  // Box-Muller; 1 - rand() evita log(0).
   return Math.sqrt(-2 * Math.log(1 - rand())) * Math.cos(2 * Math.PI * rand());
 }
 
@@ -70,7 +70,7 @@ function forEachPosition(coords, fn) {
   else for (const c of coords) forEachPosition(c, fn);
 }
 
-// Department list with bounding-box centre (good enough to assign a region).
+// Lista de departamentos con el centro de su bounding box (suficiente para asignar una región).
 export function departmentsFromGeojson(geo) {
   return geo.features
     .map((f) => {
@@ -94,7 +94,7 @@ export function departmentsFromGeojson(geo) {
     .sort((a, b) => a.in1.localeCompare(b.in1));
 }
 
-// Seasonal weights by calendar month (Jan..Dec), roughly averaging 1.
+// Pesos estacionales por mes calendario (ene..dic), con un promedio aproximado de 1.
 const SEASONS = {
   north: [0.3, 0.2, 0.2, 0.3, 0.4, 0.6, 1.0, 1.8, 2.3, 1.9, 0.8, 0.4],
   delta: [0.6, 0.7, 0.8, 0.9, 0.9, 1.0, 1.4, 1.8, 1.5, 1.0, 0.6, 0.5],
@@ -102,7 +102,7 @@ const SEASONS = {
   patagonia: [2.4, 2.1, 1.2, 0.5, 0.2, 0.1, 0.1, 0.1, 0.2, 0.5, 1.0, 1.8],
 };
 
-// Mean monthly hotspots for a "typical" department of each region.
+// Focos mensuales medios de un departamento "típico" de cada región.
 const NORTH_HIGH = new Set(['22', '34', '66', '86']); // Chaco, Formosa, Salta, Santiago del Estero
 const NORTH_OTHER = new Set(['10', '18', '38', '46', '54', '90']);
 const CENTER = new Set(['14', '42', '74', '82']);
@@ -115,7 +115,7 @@ export function regionOf(dep) {
   if (prov === '02') return { season: 'center', base: 0 };
   if (NORTH_HIGH.has(prov)) return { season: 'north', base: 14 };
   if (NORTH_OTHER.has(prov)) return { season: 'north', base: 5 };
-  // Parana Delta: southern Entre Rios and the northeastern Buenos Aires islands.
+  // Delta del Paraná: sur de Entre Ríos y las islas del noreste de Buenos Aires.
   if (prov === '30' && dep.lat < -32.6) return { season: 'delta', base: 10 };
   if (prov === '06' && dep.lat > -34.6 && dep.lon > -60.6) return { season: 'delta', base: 2.5 };
   if (prov === '30') return { season: 'center', base: 3 };
@@ -123,10 +123,10 @@ export function regionOf(dep) {
   if (CUYO.has(prov)) return { season: 'center', base: 1.2 };
   if (NORTH_PATAGONIA.has(prov)) return { season: 'patagonia', base: 0.8 };
   if (SOUTH_PATAGONIA.has(prov)) return { season: 'patagonia', base: 0.15 };
-  return { season: 'center', base: 0.5 }; // Buenos Aires and anything else
+  return { season: 'center', base: 0.5 }; // Buenos Aires y cualquier otro
 }
 
-// A few extreme years per seasonal region (loosely inspired by known fire seasons).
+// Algunos años extremos por región estacional (inspirados libremente en temporadas de incendios conocidas).
 const EXTREME_YEARS = {
   north: { 2007: 2.2, 2012: 1.8, 2020: 2.5, 2022: 2.0 },
   delta: { 2008: 3.5, 2020: 3.0, 2022: 2.5 },
@@ -134,7 +134,7 @@ const EXTREME_YEARS = {
   patagonia: { 2015: 2.5, 2021: 2.0, 2022: 2.2 },
 };
 
-// Returns { months, series: { in1: { focos: [...], anomalia: [...] } } }.
+// Devuelve { months, series: { in1: { focos: [...], anomalia: [...] } } }.
 export function generateSeries(departments, months, { seed = 20260908 } = {}) {
   const rand = mulberry32(seed);
   const years = [...new Set(months.map((m) => Number(m.slice(0, 4))))];

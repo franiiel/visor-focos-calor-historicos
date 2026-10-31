@@ -1,8 +1,8 @@
 <?php
-// Department heat-hotspot viewer. The header and footer partials are placeholders:
-// on integration they are replaced by the SEPA site's real header and footer.
+// Visor departamental de focos de calor. Los parciales de encabezado y pie de página son provisorios:
+// en la integración se reemplazan por el encabezado y el pie de página reales del sitio de SEPA.
 
-// Cache busting: the version changes whenever the file changes.
+// Invalidación de caché: la versión cambia cada vez que cambia el archivo.
 function asset_version($file)
 {
     $t = @filemtime(__DIR__ . '/' . $file);
