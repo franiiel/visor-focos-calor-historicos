@@ -2,7 +2,7 @@
 
 Mapa interactivo de focos de calor mensuales y su anomalía por departamento de Argentina. Es el prototipo local (fase 2) de la propuesta descrita en [`VISOR_FOCOS.md`](VISOR_FOCOS.md).
 
-Los datos son los de SEPA: los CSV mensuales se generan desde su planilla departamental con `tools/convert_excel.mjs` (ver «Convertir la planilla de SEPA»). No se versionan. Para probar sin la planilla hay un generador de datos sintéticos.
+Los CSV mensuales se calculan desde los focos de NASA FIRMS con `tools/compute_anomalies.mjs` (ver «Calcular desde los focos de FIRMS»). La planilla departamental de SEPA queda como control, y también se puede convertir con `tools/convert_excel.mjs`. No se versionan. Para probar sin la planilla hay un generador de datos sintéticos.
 
 ## Qué incluye
 
@@ -48,6 +48,19 @@ Los CSV sintéticos **no se versionan** (están en `.gitignore`): se regeneran r
 
 `anomalia` es la clase 1–5 de SEPA respecto del mismo mes en 2001–2025, calculada con la misma regla que el conversor (ver «Convertir la planilla de SEPA»).
 
+## Calcular desde los focos de FIRMS
+
+```sh
+node tools/build_geometry.mjs   # una vez: descarga DEPTOS-PROV.geojson en tools/raw/
+node tools/compute_anomalies.mjs --firms DL_FIRE_M-C61_43028
+```
+
+`--firms` es la carpeta de una descarga de NASA FIRMS (MODIS C6.1, Argentina): un `fire_archive_*.csv` y, si hay, un `fire_nrt_*.csv`. Del NRT se usan solo los días posteriores al último del archivo histórico, para no contar dos veces. Se cuentan todos los focos, sin filtrar por `type` ni `confidence`, como la planilla de SEPA. Cada foco se asigna a su departamento por punto en polígono contra `DEPTOS-PROV.geojson` completo (nunca contra la geometría simplificada del visor) y los que caen fuera de todo departamento (mar, países vecinos) se descartan y se informan.
+
+Escribe en `visor_deptos/datos/` un `focos_AAAAMM.csv` por mes, con todos los departamentos (0 si no hubo focos), y `referencia.csv` (`in1,mes,max,promedio,min,desvio`): las referencias de cada departamento y mes calendario en el período `climatology` de `config.json`. El desvío es el muestral, como `DESVEST` de Excel. La clase (1 a 5) usa la misma regla que el conversor de la planilla. Tarda menos de un minuto con 1,7 millones de focos. Opciones: `--geojson`, `--config` y `--out`.
+
+El último mes queda incompleto si la descarga termina antes de fin de mes: el script muestra la fecha del último foco.
+
 ## Convertir la planilla de SEPA
 
 ```sh
@@ -65,7 +78,7 @@ node --test "tools/test/*.test.mjs"
 php tools/test/series_test.php
 ```
 
-Las pruebas de Node cubren las escalas y el formato (`scales.js`), la lectura de CSV y el control de pedidos superpuestos (`data.js`), el conversor (regla de clases, media sobre los años con dato, nombres desconocidos o repetidos y lectura de un `.xlsx` de prueba) y el generador (determinismo y formato de los archivos). La prueba de PHP no usa frameworks: cubre `lib/series.php` (forma de la serie, prefijo y columnas configurados, huella de la carpeta `datos/` y de la configuración, reutilización del caché y error ante un CSV sin las columnas requeridas), la validación de `config.json` y las respuestas de `listar.php` y `serie.php` (forma del JSON y códigos 400, 404 y 500), que corre como subprocesos sobre una copia temporal. Termina con código 0 si todo pasa.
+Las pruebas de Node cubren las escalas y el formato (`scales.js`), la lectura de CSV y el control de pedidos superpuestos (`data.js`), el conversor (regla de clases, media y desvío sobre los años con dato, nombres desconocidos o repetidos y lectura de un `.xlsx` de prueba), el motor de FIRMS (punto en polígono con huecos y multipolígonos, NRT solo después del archivo histórico, ceros y referencias) y el generador (determinismo y formato de los archivos). La prueba de PHP no usa frameworks: cubre `lib/series.php` (forma de la serie, prefijo y columnas configurados, huella de la carpeta `datos/` y de la configuración, reutilización del caché y error ante un CSV sin las columnas requeridas), la validación de `config.json` y las respuestas de `listar.php` y `serie.php` (forma del JSON y códigos 400, 404 y 500), que corre como subprocesos sobre una copia temporal. Termina con código 0 si todo pasa.
 
 ## Servir el visor
 
@@ -80,7 +93,7 @@ y abrir <http://localhost:8000/>. Antes hay que generar los datos (ver arriba). 
 ## Actualizar los datos
 
 1. Si quedaron CSV sintéticos, borrar los `focos_*.csv` de `visor_deptos/datos/`.
-2. Generar los CSV desde la planilla (ver «Convertir la planilla de SEPA») o copiar los de SEPA con el mismo nombre (`focos_AAAAMM.csv`) y las columnas `in1,focos,anomalia`. `in1` es el código INDEC de 5 dígitos, con el cero inicial; `anomalia` es la clase 1 a 5.
+2. Generar los CSV desde FIRMS (ver «Calcular desde los focos de FIRMS»), desde la planilla (ver «Convertir la planilla de SEPA») o copiar los de SEPA con el mismo nombre (`focos_AAAAMM.csv`) y las columnas `in1,focos,anomalia`. `in1` es el código INDEC de 5 dígitos, con el cero inicial; `anomalia` es la clase 1 a 5.
 3. No hace falta tocar código: `listar.php` detecta los meses y `serie.php` rearma el caché cuando cambia algún CSV.
 
 Los departamentos sin fila en un mes se muestran en gris como «sin dato».

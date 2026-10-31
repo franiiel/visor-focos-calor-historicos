@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Local prototype with **real SEPA data**: monthly CSVs are generated (gitignored) from SEPA's department workbook with `tools/convert_excel.mjs`; `tools/generate_synthetic.mjs` makes test data when the workbook is not available. Viewer in `visor_deptos/`, one-time tools and tests in `tools/`. `VISOR_FOCOS.md` is the design document (in Spanish) and the source of truth. Read it before proposing or writing anything, and keep it updated when decisions change. It is the project's proposal to SEPA (INTA), so changes to scope or architecture belong there first. `README.md` (Spanish) has run instructions; task progress lives in `odd/tasks/`.
+Local prototype with **real data**: monthly CSVs are computed (gitignored) from raw NASA FIRMS hotspots with `tools/compute_anomalies.mjs`; SEPA's department workbook (hand-filled by the tutor) is the expected result used for validation, and `tools/convert_excel.mjs` still converts it; `tools/generate_synthetic.mjs` makes test data when the workbook is not available. Viewer in `visor_deptos/`, one-time tools and tests in `tools/`. `VISOR_FOCOS.md` is the design document (in Spanish) and the source of truth. Read it before proposing or writing anything, and keep it updated when decisions change. It is the project's proposal to SEPA (INTA), so changes to scope or architecture belong there first. `README.md` (Spanish) has run instructions; task progress lives in `odd/tasks/`.
 
 The PHP endpoints have been verified locally with PHP 8.3 (`listar.php`, `serie.php` status codes, cache reuse and rebuild).
 
@@ -13,6 +13,7 @@ The PHP endpoints have been verified locally with PHP 8.3 (`listar.php`, `serie.
 ```sh
 node tools/build_geometry.mjs          # download + simplify geometry -> visor_deptos/deptos.geo.json (pinned mapshaper via npx)
 node tools/generate_synthetic.mjs      # synthetic CSVs -> visor_deptos/datos/ (deterministic, gitignored)
+node tools/compute_anomalies.mjs --firms DL_FIRE_M-C61_43028  # FIRMS points -> visor_deptos/datos/ (needs tools/raw/DEPTOS-PROV.geojson from build_geometry)
 node tools/convert_excel.mjs --xlsx ESTADISTICAS-DEPARTAMENTALES2026.xlsx  # SEPA workbook -> visor_deptos/datos/
 node --test "tools/test/*.test.mjs"    # unit tests (a bare directory argument does not work in Node 24)
 php tools/test/series_test.php         # PHP tests for lib/series.php (plain PHP, exit code 0/1)

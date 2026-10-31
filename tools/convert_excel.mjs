@@ -105,10 +105,34 @@ export function anomalyClass(focos, { max, mean, min }) {
 }
 
 // Reference statistics of the values present for one department and calendar month.
+// std is the sample standard deviation, as Excel's STDEV (null with a single value).
 export function referenceStats(values) {
   if (!values.length) return null;
-  const sum = values.reduce((a, b) => a + b, 0);
-  return { max: Math.max(...values), mean: sum / values.length, min: Math.min(...values) };
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const std = values.length > 1 ? Math.sqrt(values.reduce((a, v) => a + (v - mean) ** 2, 0) / (values.length - 1)) : null;
+  return { max: Math.max(...values), mean, min: Math.min(...values), std };
+}
+
+// series: Map<in1, Map<AAAAMM, value>>. Returns { byMonth: Map<AAAAMM, [[in1, value,
+// class|null], ...]> sorted by month and in1, reference: Map<in1, [12 × stats|null]> }.
+// The reference of each calendar month uses the values inside the climatology period.
+export function classifySeries(series, climatology) {
+  const result = new Map();
+  const references = new Map();
+  for (const in1 of [...series.keys()].sort()) {
+    const byMonth = series.get(in1);
+    const reference = Array.from({ length: 12 }, (_, i) => {
+      const mm = String(i + 1).padStart(2, '0');
+      return referenceStats([...byMonth].filter(([m]) => m.endsWith(mm) && m >= climatology.from && m <= climatology.to).map(([, v]) => v));
+    });
+    references.set(in1, reference);
+    for (const [month, focos] of byMonth) {
+      const ref = reference[Number(month.slice(4)) - 1];
+      if (!result.has(month)) result.set(month, []);
+      result.get(month).push([in1, focos, ref ? anomalyClass(focos, ref) : null]);
+    }
+  }
+  return { byMonth: new Map([...result].sort(([a], [b]) => a.localeCompare(b))), reference: references };
 }
 
 // history: [{ year, prov, depto, values: [12 × number|null] }]; codes: Map<"PROV|DEPTO", in1>.
@@ -147,20 +171,7 @@ export function buildMonthlyRows(history, codes, climatology) {
     });
   }
 
-  const result = new Map();
-  for (const in1 of [...series.keys()].sort()) {
-    const byMonth = series.get(in1);
-    const reference = Array.from({ length: 12 }, (_, i) => {
-      const mm = String(i + 1).padStart(2, '0');
-      return referenceStats([...byMonth].filter(([m]) => m.endsWith(mm) && m >= climatology.from && m <= climatology.to).map(([, v]) => v));
-    });
-    for (const [month, focos] of byMonth) {
-      const ref = reference[Number(month.slice(4)) - 1];
-      if (!result.has(month)) result.set(month, []);
-      result.get(month).push([in1, focos, ref ? anomalyClass(focos, ref) : null]);
-    }
-  }
-  return { byMonth: new Map([...result].sort(([a], [b]) => a.localeCompare(b))), skipped: skipped.sort() };
+  return { byMonth: classifySeries(series, climatology).byMonth, skipped: skipped.sort() };
 }
 
 // ---------- Workbook -> CSV files ----------
@@ -203,13 +214,17 @@ export function convertWorkbook(buf, config) {
       values: iMonths.map((i, m) => count(r[i] ?? '', `${r[iYear]} ${r[iProv]} / ${r[iDepto]} ${MONTH_HEADERS[m]}`)),
     }));
 
-  const header = `in1,${config.columns.value},${config.columns.anomaly}`;
   const { byMonth, skipped } = buildMonthlyRows(history, codes, config.climatology);
-  const files = [...byMonth].map(([month, rows]) => ({
+  return { files: monthFiles(byMonth, config), skipped };
+}
+
+// byMonth (see classifySeries) -> [{ name: '<filePrefix>_AAAAMM.csv', content }].
+export function monthFiles(byMonth, config) {
+  const header = `in1,${config.columns.value},${config.columns.anomaly}`;
+  return [...byMonth].map(([month, rows]) => ({
     name: `${config.filePrefix}_${month}.csv`,
     content: [header, ...rows.map(([in1, focos, cls]) => `${in1},${focos},${cls ?? ''}`)].join('\n') + '\n',
   }));
-  return { files, skipped };
 }
 
 function parseArgs(argv) {

@@ -12,3 +12,9 @@ node_modules/
 
 # Local agent tooling
 .atl/
+
+# NASA FIRMS downloads (raw input of tools/compute_anomalies.mjs, large)
+DL_FIRE_*/
+
+# Reference statistics written by tools/compute_anomalies.mjs
+visor_deptos/datos/referencia.csv

@@ -1,0 +1,220 @@
+#!/usr/bin/env node
+// Computes the viewer's monthly CSVs from raw NASA FIRMS MODIS hotspots:
+// datos/<filePrefix>_AAAAMM.csv with `in1,<value>,<anomaly>`, plus datos/referencia.csv
+// with the reference statistics (max, mean, min, standard deviation) per department and
+// calendar month.
+//
+// Usage:
+//   node tools/compute_anomalies.mjs --firms DL_FIRE_M-C61_43028
+//        [--geojson tools/raw/DEPTOS-PROV.geojson] [--config visor_deptos/config.json]
+//        [--out visor_deptos/datos]
+//
+// --firms is a FIRMS download folder: one fire_archive_*.csv and, optionally, one
+// fire_nrt_*.csv. NRT points count only after the archive's last day. Every point
+// counts (no type or confidence filter, as SEPA's workbook). Each point is assigned by
+// point in polygon to the full DEPTOS-PROV.geojson (from `node tools/build_geometry.mjs`),
+// never the simplified viewer geometry. A department without points in a month has 0.
+// The class is SEPA's rule 1-5 (see VISOR_FOCOS.md) against the config.json climatology.
+
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { normalizeFeatures } from './build_geometry.mjs';
+import { classifySeries, monthFiles } from './convert_excel.mjs';
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+// ---------- Point in polygon ----------
+
+// Even-odd ray casting over every ring, so holes are excluded.
+export function inPolygon(x, y, rings) {
+  let inside = false;
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i];
+      const [xj, yj] = ring[j];
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+const bboxOf = (rings) => {
+  const b = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const [x, y] of rings[0]) {
+    b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y);
+    b[2] = Math.max(b[2], x); b[3] = Math.max(b[3], y);
+  }
+  return b;
+};
+const inBox = (b, x, y) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
+
+// Returns [{ in1, parts: [{ bbox, rings }] }] sorted by in1, one entry per department
+// (the source has several features for some departments).
+export function prepareDepartments(geojson) {
+  const byCode = new Map();
+  for (const f of normalizeFeatures(geojson).features) {
+    const polygons = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+    const parts = byCode.get(f.properties.in1) ?? [];
+    for (const rings of polygons) parts.push({ bbox: bboxOf(rings), rings });
+    byCode.set(f.properties.in1, parts);
+  }
+  return [...byCode].sort(([a], [b]) => a.localeCompare(b)).map(([in1, parts]) => ({ in1, parts }));
+}
+
+// ponytail: linear scan with a bbox prefilter (fine for ~2M points); add a grid index if it gets slow.
+export function findDepartment(depts, lon, lat) {
+  for (const { in1, parts } of depts) {
+    for (const { bbox, rings } of parts) {
+      if (inBox(bbox, lon, lat) && inPolygon(lon, lat, rings)) return in1;
+    }
+  }
+  return null;
+}
+
+// ---------- FIRMS CSV ----------
+
+// Returns [{ lat, lon, date: 'AAAA-MM-DD' }]. Columns are found by header name, since
+// the archive and NRT files do not have the same columns.
+export function readFirms(text) {
+  const lines = text.split(/\r?\n/);
+  const header = lines[0].split(',');
+  const [iLat, iLon, iDate] = ['latitude', 'longitude', 'acq_date'].map((name) => {
+    const i = header.indexOf(name);
+    if (i < 0) throw new Error(`FIRMS file has no column ${name}`);
+    return i;
+  });
+  const points = [];
+  for (let n = 1; n < lines.length; n++) {
+    if (lines[n] === '') continue;
+    const c = lines[n].split(',');
+    const lat = Number(c[iLat]);
+    const lon = Number(c[iLon]);
+    const date = c[iDate];
+    if (c[iLat] === '' || c[iLon] === '' || !Number.isFinite(lat) || !Number.isFinite(lon) || !/^\d{4}-\d{2}-\d{2}$/.test(date ?? '')) {
+      throw new Error(`Invalid FIRMS row at line ${n + 1}: ${lines[n]}`);
+    }
+    points.push({ lat, lon, date });
+  }
+  return points;
+}
+
+// ---------- Engine ----------
+
+function monthRange(from, to) {
+  const months = [];
+  for (let y = Number(from.slice(0, 4)), m = Number(from.slice(4)); `${y}${String(m).padStart(2, '0')}` <= to; m === 12 ? (y++, m = 1) : m++) {
+    months.push(`${y}${String(m).padStart(2, '0')}`);
+  }
+  return months;
+}
+
+const maxDate = (points) => points.reduce((a, p) => (p.date > a ? p.date : a), '');
+const cell = (v) => (v === null ? '' : String(v));
+
+// archive, nrt: FIRMS CSV texts (nrt may be null). Returns { files, reference (CSV
+// text), dropped (points outside every department), lastDate }.
+export function computeAnomalies({ archive, nrt, geojson, config }) {
+  const points = readFirms(archive);
+  const lastArchive = maxDate(points);
+  if (nrt) points.push(...readFirms(nrt).filter((p) => p.date > lastArchive));
+  if (!points.length) throw new Error('FIRMS files have no points');
+
+  const depts = prepareDepartments(geojson);
+  const months = monthRange(
+    points.reduce((a, p) => (p.date < a ? p.date : a), points[0].date).slice(0, 7).replace('-', ''),
+    maxDate(points).slice(0, 7).replace('-', ''),
+  );
+  const series = new Map(depts.map(({ in1 }) => [in1, new Map(months.map((m) => [m, 0]))]));
+  let dropped = 0;
+  for (const p of points) {
+    const in1 = findDepartment(depts, p.lon, p.lat);
+    if (!in1) {
+      dropped++;
+      continue;
+    }
+    const byMonth = series.get(in1);
+    const month = p.date.slice(0, 4) + p.date.slice(5, 7);
+    byMonth.set(month, byMonth.get(month) + 1);
+  }
+
+  const { byMonth, reference } = classifySeries(series, config.climatology);
+  const refRows = [];
+  for (const [in1, stats] of reference) {
+    stats.forEach((s, i) => {
+      const mm = String(i + 1).padStart(2, '0');
+      refRows.push([in1, mm, ...(s ? [s.max, s.mean, s.min, s.std] : [null, null, null, null])].map(cell).join(','));
+    });
+  }
+  return {
+    files: monthFiles(byMonth, config),
+    reference: ['in1,mes,max,promedio,min,desvio', ...refRows].join('\n') + '\n',
+    dropped,
+    lastDate: maxDate(points),
+  };
+}
+
+// ---------- CLI ----------
+
+function parseArgs(argv) {
+  const opts = {
+    firms: null,
+    geojson: join(repoRoot, 'tools', 'raw', 'DEPTOS-PROV.geojson'),
+    config: join(repoRoot, 'visor_deptos', 'config.json'),
+    out: join(repoRoot, 'visor_deptos', 'datos'),
+  };
+  for (let i = 0; i < argv.length; i += 2) {
+    const key = argv[i].replace(/^--/, '');
+    if (!(key in opts) || argv[i + 1] === undefined) {
+      throw new Error(`Unknown or incomplete option: ${argv[i]}`);
+    }
+    opts[key] = argv[i + 1];
+  }
+  if (!opts.firms) throw new Error('Missing --firms <FIRMS download folder>');
+  return opts;
+}
+
+// The single file matching prefix in dir, or null when optional and absent.
+function pick(dir, prefix, optional) {
+  const found = readdirSync(dir).filter((f) => f.startsWith(prefix) && f.endsWith('.csv'));
+  if (found.length > 1) throw new Error(`More than one ${prefix}*.csv in ${dir}`);
+  if (!found.length && !optional) throw new Error(`No ${prefix}*.csv in ${dir}`);
+  return found.length ? join(dir, found[0]) : null;
+}
+
+function main() {
+  const opts = parseArgs(process.argv.slice(2));
+  const dir = resolve(opts.firms);
+  const archivePath = pick(dir, 'fire_archive_', false);
+  const nrtPath = pick(dir, 'fire_nrt_', true);
+  let geojson;
+  try {
+    geojson = JSON.parse(readFileSync(resolve(opts.geojson), 'utf8'));
+  } catch (err) {
+    throw new Error(`Cannot read ${opts.geojson} (run node tools/build_geometry.mjs to download it): ${err.message}`);
+  }
+  // Strip a UTF-8 BOM, as lib/config.php does.
+  const config = JSON.parse(readFileSync(resolve(opts.config), 'utf8').replace(/^﻿/, ''));
+  const { files, reference, dropped, lastDate } = computeAnomalies({
+    archive: readFileSync(archivePath, 'utf8'),
+    nrt: nrtPath && readFileSync(nrtPath, 'utf8'),
+    geojson,
+    config,
+  });
+  const out = resolve(opts.out);
+  mkdirSync(out, { recursive: true });
+  for (const { name, content } of files) writeFileSync(join(out, name), content);
+  writeFileSync(join(out, 'referencia.csv'), reference);
+  console.log(`Wrote ${files.length} monthly CSVs (${files[0].name} … ${files.at(-1).name}) and referencia.csv to ${out}`);
+  console.log(`Last hotspot date: ${lastDate} (a month after it is incomplete). Points outside every department: ${dropped}`);
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    main();
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
