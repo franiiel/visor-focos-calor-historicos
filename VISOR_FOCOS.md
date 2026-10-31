@@ -54,7 +54,7 @@ Las condiciones se evalúan de arriba hacia abajo (fórmula de la planilla: `SI(
 | | AgroENSO | Visor de focos |
 |---|---|---|
 | Pregunta | ¿Cómo afecta el ENSO al rendimiento? | ¿Cuántos focos hubo y cuánto se apartan de lo normal? |
-| Cálculo | Pipeline estadístico propio (detrending, Wilcoxon, FDR) | Ninguno: los números ya los calcula SEPA |
+| Cálculo | Pipeline estadístico propio (detrending, Wilcoxon, FDR) | Conteo de focos por departamento y mes, y clase 1–5 contra máximo, media y mínimo históricos |
 | Actualización | Una vez por campaña | Todos los meses |
 | Quién actualiza | Quien corre el pipeline de Python | El proceso mensual de SEPA |
 | Cobertura | Zona agrícola de AR, BR y UY | Todos los departamentos de Argentina |
@@ -106,7 +106,26 @@ in1,focos,anomalia
 
 El formato final lo define lo que el proceso de SEPA pueda exportar más fácil. Lo importante es que tenga el código INDEC y los números.
 
-**Serie histórica:** se genera **una sola vez** desde la planilla departamental con `tools/convert_excel.mjs`. El script lee `FCXMESXAÑO`, pasa de nombre a código con `ESTADISTICAS`, calcula la clase de cada mes con la regla de SEPA y escribe un CSV por mes con este formato. La unión por nombre queda dentro de esa conversión: los CSV salen con `in1` y el visor nunca une por nombre.
+**Serie histórica:** se calcula desde los focos crudos de NASA FIRMS con `tools/compute_anomalies.mjs` (ver «Motor de cálculo desde FIRMS»). La planilla departamental pasa a ser el resultado esperado, con el que se valida el motor. También se puede convertir con `tools/convert_excel.mjs`: lee `FCXMESXAÑO`, pasa de nombre a código con `ESTADISTICAS`, calcula la clase de cada mes con la regla de SEPA y escribe un CSV por mes con este formato. En los dos casos los CSV salen con `in1` y el visor nunca une por nombre.
+
+### Motor de cálculo desde FIRMS
+
+La planilla de SEPA se completa a mano. El motor hace el mismo cálculo desde los datos de origen, una descarga de NASA FIRMS (MODIS C6.1, Argentina: `fire_archive_*.csv` de 2001 en adelante y `fire_nrt_*.csv` para los meses que todavía no están en el archivo histórico):
+
+1. **Fuentes.** Del NRT se toman solo los días posteriores al último del archivo histórico, para no contar dos veces. Se cuentan **todos los focos**, sin filtrar por `type` ni `confidence`: así cierran los totales mensuales de la planilla (agosto de 2025: 9435 focos en FIRMS y en la planilla; enero de 2001: 8132 y 8130).
+2. **Departamento de cada foco.** Punto en polígono contra `DEPTOS-PROV.geojson` completo, la misma capa del visor de 5 días. Nunca contra la geometría simplificada del visor, que movería los focos cercanos a los límites. Los focos que no caen en ningún departamento (mar, países vecinos) se descartan: son 2109 de 1,7 millones.
+3. **Ceros.** Un departamento sin focos en un mes tiene 0 focos ese mes. Con los datos de origen el cero es real, así que cada mes tiene un renglón por departamento (ver la pregunta 2).
+4. **Referencias.** Para cada departamento y mes calendario, en el período `climatology` (2001–2025): máximo, media, mínimo y desvío estándar (muestral, como `DESVEST` de Excel). Se guardan en `datos/referencia.csv`. El desvío no interviene en la clase.
+5. **Clase.** La regla de la tabla de «Datos recibidos de SEPA», sin cambios.
+
+Salen los mismos CSV mensuales de «Formato de datos propuesto», así que el visor no cambia. Tarda menos de un minuto.
+
+**Validación contra la planilla** (de enero de 2001 a agosto de 2026):
+
+- Focos por departamento y mes: 143 043 de 149 418 coinciden exactamente (96 %). De los 6375 que no coinciden, 2572 difieren en un solo foco.
+- Las diferencias de un foco suelen ser entre departamentos vecinos (enero de 2026: Gualeguaychú 12 en la planilla y 11 en el motor; Uruguay, 8 y 9). Es un foco cerca del límite que queda de distinto lado, señal de que la planilla se arma con otra capa o versión de los límites (ver la pregunta 8).
+- Las diferencias grandes son errores de carga de la planilla (ver las preguntas 9 y 10).
+- Clases de 2026 contra las hojas `ENERO` … `AGO`: 3951 de 4080 coinciden (96,8 %). De las 129 distintas, 102 vienen de un conteo de 2026 distinto (casi siempre por un foco del límite) y el resto, de las referencias (años sin renglón en la planilla, errores de carga y la hoja `ABRIL`).
 
 ### Configuración del conjunto de datos
 
@@ -208,7 +227,7 @@ El gráfico de un departamento necesita todos sus meses. Si el navegador tuviera
 
 ## Riesgos
 
-- **Formato de entrega mensual sin definir.** Los datos existen (ver "Datos recibidos de SEPA"), pero hoy viven en una planilla que se completa a mano, y PHP no lee `.xlsx` sin una librería externa. Lo ideal es que SEPA exporte cada mes el CSV en el formato acordado. Si no puede, alguien tiene que correr el script de conversión todos los meses, y eso es justo lo que el diseño busca evitar (ver "Idea central").
+- **Formato de entrega mensual sin definir.** Los datos existen (ver "Datos recibidos de SEPA"), pero hoy viven en una planilla que se completa a mano, y PHP no lee `.xlsx` sin una librería externa. Lo ideal es que SEPA exporte cada mes el CSV en el formato acordado. Si no puede, alguien tiene que correr el script de conversión todos los meses, y eso es justo lo que el diseño busca evitar (ver "Idea central"). El motor de FIRMS saca la planilla del medio, pero no evita el paso mensual: alguien tiene que bajar los focos del mes y correrlo, salvo que el servidor de SEPA lo haga solo, como ya baja el CSV de FIRMS para el visor de 5 días.
 - **Continuidad de MODIS.** Terra y Aqua llevan más de 20 años en órbita y se acercan al fin de su misión, y el sitio ya publica productos con VIIRS. Conviene decidir desde el principio con qué sensor se arma el visor, o que la columna de datos indique el sensor.
 - **Mantenimiento.** Si nadie del equipo de SEPA toma el visor como propio, se desactualiza. Por eso sigue el formato de sus otros visores.
 - **`descargarkml.php` acepta cualquier valor en `uri`.** Con `?uri=x` responde 200 con un KML. No se exploró más, pero conviene revisarlo con el mismo criterio que `listar_archivos_MNC.php` antes de enlazarlo desde el visor nuevo.
@@ -216,9 +235,13 @@ El gráfico de un departamento necesita todos sus meses. Si el navegador tuviera
 ## Preguntas pendientes para SEPA
 
 1. **¿En qué formato y cada cuánto se van a entregar los datos de cada mes?** Lo ideal es un CSV por mes con `in1,focos,anomalia` (ver "Formato de datos propuesto").
-2. **¿Un departamento sin renglón en un año significa cero focos?** De 2001 a 2020 cada año tiene entre 450 y 490 departamentos de 510. Hoy la media de referencia se calcula solo con los años que tienen renglón. Por ejemplo, Alberti (Buenos Aires) en enero tiene 24 años con datos: su media es 10 / 24 = 0,42, y sería 10 / 25 = 0,40 si el año faltante contara como cero. Ese cálculo sube la media y puede cambiar la clase. El visor va a replicar el cálculo de SEPA para que las clases coincidan con sus mapas, salvo que SEPA indique otra cosa.
+2. **¿Un departamento sin renglón en un año significa cero focos?** De 2001 a 2020 cada año tiene entre 450 y 490 departamentos de 510. Hoy la media de referencia se calcula solo con los años que tienen renglón. Por ejemplo, Alberti (Buenos Aires) en enero tiene 24 años con datos: su media es 10 / 24 = 0,42, y sería 10 / 25 = 0,40 si el año faltante contara como cero. Ese cálculo sube la media y puede cambiar la clase. El conversor de la planilla replica ese cálculo. El motor de FIRMS cuenta el cero, porque con los datos de origen un mes sin focos es un cero real: de los 14 996 departamento-mes sin renglón en la planilla, el motor encuentra focos en solo 327. ¿Se acepta este criterio?
 3. **¿Se acepta la referencia 2001–2025 para clasificar los meses de esos mismos años?** En los meses históricos, el año clasificado forma parte de su propia referencia. Es el criterio de la planilla, pero conviene dejarlo explícito en la nota del visor.
-4. **¿Las comunas de la Ciudad de Buenos Aires (`02001` a `02021`) y el departamento `94021` quedan sin datos?** Están en la geometría pero no en la planilla.
+4. **¿Las comunas de la Ciudad de Buenos Aires (`02001` a `02021`) y el departamento `94021` quedan sin datos?** Están en la geometría pero no en la planilla. El motor de FIRMS les calcula focos (casi siempre 0).
 5. **Años mal cargados en `FCXMESXAÑO`.** Cuatro filas tienen un año que no coincide con el bloque donde están: Comandante Fernández (Chaco) figura tres veces en 2020 (filas 9184, 9679 y 10189), y San Pedro (Buenos Aires) y San Roque (Corrientes) figuran dos veces en 2022 (filas 9639 y 9759, dentro del bloque de 2021). El conversor deja esos departamentos sin dato en esos años y los informa, sin adivinar cuál es la fila correcta. Al corregir la planilla, alcanza con volver a convertirla.
 6. **La hoja `ABRIL` usa 2001–2024 como referencia.** Las demás hojas de 2026 usan 2001–2025. Por eso 8 departamentos tienen en abril una clase distinta de la que calcula el visor (por ejemplo, General Alvear, Mendoza: sus 70 focos de abril de 2025 no entran en el máximo de la hoja).
 7. **La suma de los departamentos no coincide con la planilla provincial en 2021–2022.** De 7107 meses por provincia, 173 no coinciden, y 169 son de esos dos años (por ejemplo, Entre Ríos en diciembre de 2021: 717 focos sumando los departamentos y 476 en la planilla provincial). ¿Cuál de las dos planillas es la correcta para esos años?
+8. **¿Con qué capa se asigna cada foco a su departamento?** El motor usa `DEPTOS-PROV.geojson` (INDEC 2005). Con esa capa, el 96 % de los departamento-mes coincide con la planilla, y la mayoría de las diferencias es un foco que queda del otro lado del límite entre dos vecinos.
+9. **Agosto de 2020 tiene 10 708 focos menos en la planilla que en FIRMS** (22 263 contra 32 886), concentrados en Formosa y el Delta: Patiño (Formosa) tiene 1423 focos en la planilla y 2158 en el motor, y Victoria (Entre Ríos), 942 y 1590. Los demás meses cierran con una diferencia de pocos focos.
+10. **Valores que parecen intercambiados entre departamentos.** En febrero de 2025, Lácar (Neuquén) tiene 0 focos en la planilla y 662 en el motor, y Huiliches tiene 650 y 0. En diciembre de 2021 pasa algo parecido en Formosa: Bermejo tiene 773 en la planilla y 90 en el motor, y Patiño, 101 y 777.
+11. **¿Desvío estándar muestral o poblacional?** La planilla no lo calcula. El motor usa el muestral (`DESVEST`). Si se prefiere el poblacional (`DESVEST.P`), es un cambio de una línea.
