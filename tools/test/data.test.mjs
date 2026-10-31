@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  parseMonthCsv, splitMonth, monthLabel, createLatestGuard, lustrumStart, lustrumMeans,
+  parseMonthCsv, splitMonth, monthLabel, createLatestGuard, lustrumStart, lustrumMeans, sumSeries,
 } from '../../visor_deptos/data.js';
 
 const COLUMNS = { value: 'focos', anomaly: 'anomalia' };
@@ -52,6 +52,18 @@ test('lustrumMeans averages each 5-year block, skipping months without data', ()
   const values = [10, null, 20, 4, 6, null];
   assert.deepEqual(lustrumMeans(months, values), [15, 15, 15, 5, 5, null]);
   assert.deepEqual(lustrumMeans([], []), []);
+});
+
+test('sumSeries adds the departments of a province, or all of them without a prefix', () => {
+  const months = ['202601', '202602', '202603'];
+  const data = {
+    '06007': { value: [1, null, null] },
+    '06014': { value: [2, 3, null] },
+    '22007': { value: [10, 20, null] },
+  };
+  assert.deepEqual(sumSeries(months, data, '06'), [3, 3, null]);
+  assert.deepEqual(sumSeries(months, data), [13, 23, null]);
+  assert.deepEqual(sumSeries(months, data, '94'), [null, null, null]);
 });
 
 test('createLatestGuard marks only the newest token as current', () => {

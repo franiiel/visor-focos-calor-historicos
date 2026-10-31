@@ -39,6 +39,12 @@ include __DIR__ . '/partials/header.php';
     <label>Mes
       <select id="sel-month" disabled></select>
     </label>
+    <label>Provincia
+      <select id="sel-prov" disabled><option value="">Todas</option></select>
+    </label>
+    <label>Departamento
+      <select id="sel-depto" disabled><option value="">Todos</option></select>
+    </label>
     <fieldset class="visor-layer">
       <legend>Capa</legend>
       <label><input type="radio" name="layer" value="anomaly" checked> Anomalía</label>
@@ -55,10 +61,18 @@ include __DIR__ . '/partials/header.php';
     </div>
 
     <aside class="visor-panel" id="panel">
-      <h2 id="panel-title">Serie del departamento</h2>
-      <p id="panel-info" class="visor-hint">Seleccione un departamento en el mapa para ver su serie mensual.</p>
+      <div class="visor-panel-head">
+        <h2 id="panel-title">Argentina</h2>
+        <button type="button" class="visor-icon-btn" id="chart-expand" aria-pressed="false"
+                aria-label="Ampliar gráfico" title="Ampliar gráfico">
+          <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+          <svg class="icon-collapse" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+        </button>
+      </div>
+      <p id="panel-info" class="visor-hint">Cargando serie…</p>
+      <p class="visor-hint">Elija una provincia o un departamento en el mapa para ver su serie.</p>
       <div class="visor-chart-wrap">
-        <canvas id="chart" aria-label="Serie mensual de <?php echo h($config['unit']); ?> del departamento" role="img"></canvas>
+        <canvas id="chart" aria-label="Serie mensual de <?php echo h($config['unit']); ?>" role="img"></canvas>
       </div>
     </aside>
   </div>

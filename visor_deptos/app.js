@@ -3,7 +3,7 @@
 // como scripts UMD con versión fija.
 import { buildScale, colorFor, legendItems, formatNumber, anomalyLabel } from './scales.js';
 import {
-  parseMonthCsv, splitMonth, monthLabel, MONTH_NAMES, createLatestGuard, lustrumStart, lustrumMeans,
+  parseMonthCsv, splitMonth, monthLabel, MONTH_NAMES, createLatestGuard, lustrumStart, lustrumMeans, sumSeries,
 } from './data.js';
 
 const L = globalThis.L;
@@ -39,8 +39,13 @@ const state = {
   rows: new Map(),
   scale: null,
   selected: null, // { in1, depto, provincia }
-  series: null,
+  province: null, // código de 2 dígitos del filtro de provincia, null para todo el país
+  provinces: new Map(), // código -> { name, deptos: [propiedades del feature] }
+  series: null, // { months, value, anomaly? }; anomaly solo para un único departamento
+  allSeries: null, // promesa de la respuesta completa de serie.php, usada para los totales
+  map: null,
   geoLayer: null,
+  layersByIn1: new Map(),
   chart: null,
 };
 
@@ -92,6 +97,7 @@ function createMap(geo) {
   state.geoLayer = L.geoJSON(geo, {
     style: featureStyle,
     onEachFeature: (feature, layer) => {
+      state.layersByIn1.set(feature.properties.in1, layer);
       layer.bindTooltip(() => tooltipHtml(feature.properties), { sticky: true });
       layer.on({
         mouseover: () => {
@@ -114,12 +120,14 @@ function valueFor(in1) {
 }
 
 function featureStyle(feature) {
-  const selected = state.selected && state.selected.in1 === feature.properties.in1;
+  const { in1 } = feature.properties;
+  const selected = state.selected && state.selected.in1 === in1;
+  const inProvince = state.province && in1.startsWith(state.province);
   return {
-    fillColor: state.scale ? colorFor(valueFor(feature.properties.in1), state.scale) : '#c8c8c8',
+    fillColor: state.scale ? colorFor(valueFor(in1), state.scale) : '#c8c8c8',
     fillOpacity: 0.85,
-    color: selected ? '#000' : '#7a7a7a',
-    weight: selected ? 2.5 : 0.4,
+    color: selected || inProvince ? '#000' : '#7a7a7a',
+    weight: selected ? 2.5 : inProvince ? 0.8 : 0.4,
   };
 }
 
@@ -228,33 +236,138 @@ function setupControls() {
   return latest;
 }
 
-// ---------- Series del departamento ----------
+// ---------- Filtros de área y series ----------
+
+function setupAreaFilters(geo) {
+  for (const { properties: p } of geo.features) {
+    const code = p.in1.slice(0, 2);
+    if (!state.provinces.has(code)) state.provinces.set(code, { name: p.provincia, deptos: [] });
+    state.provinces.get(code).deptos.push(p);
+  }
+  const selProv = $('sel-prov');
+  const selDepto = $('sel-depto');
+  const sorted = [...state.provinces].sort((a, b) => a[1].name.localeCompare(b[1].name, 'es'));
+  selProv.append(...sorted.map(([code, { name }]) => new Option(name, code)));
+  selProv.disabled = false;
+
+  selProv.addEventListener('change', () => {
+    fillDeptoSelect(selProv.value, '');
+    zoomTo(selProv.value);
+    showArea(selProv.value);
+  });
+  selDepto.addEventListener('change', () => {
+    if (!selDepto.value) {
+      zoomTo(selProv.value);
+      showArea(selProv.value);
+      return;
+    }
+    zoomTo(selDepto.value);
+    selectDepartment(state.layersByIn1.get(selDepto.value).feature.properties);
+  });
+}
+
+function fillDeptoSelect(code, in1) {
+  const sel = $('sel-depto');
+  const deptos = code ? [...state.provinces.get(code).deptos] : [];
+  deptos.sort((a, b) => a.depto.localeCompare(b.depto, 'es'));
+  sel.replaceChildren(new Option('Todos', ''), ...deptos.map((p) => new Option(p.depto, p.in1)));
+  sel.value = in1;
+  sel.disabled = !code;
+}
+
+// code: '' para todo el país, 2 dígitos para una provincia, 5 para un departamento.
+function zoomTo(code) {
+  if (!code) {
+    state.map.fitBounds(state.geoLayer.getBounds(), { padding: [8, 8] });
+    return;
+  }
+  const bounds = L.latLngBounds([]);
+  for (const [in1, layer] of state.layersByIn1) {
+    if (in1.startsWith(code)) bounds.extend(layer.getBounds());
+  }
+  state.map.fitBounds(bounds, { padding: [8, 8], maxZoom: 9 });
+}
+
+function seriesFailed(err) {
+  state.series = null;
+  $('panel-info').textContent = `No se pudo cargar la serie (${err.message}).`;
+  if (state.chart) state.chart.destroy();
+  state.chart = null;
+}
+
+// ponytail: los totales cargan serie.php completo (~750 KB) una sola vez; agregar un endpoint por provincia si resulta demasiado pesado.
+function loadAllSeries() {
+  if (!state.allSeries) {
+    state.allSeries = fetchJson('serie.php', 'serie.php').catch((err) => {
+      state.allSeries = null; // permite que la próxima selección reintente
+      throw err;
+    });
+  }
+  return state.allSeries;
+}
+
+// Total de todo el país (código '') o de una provincia (código de 2 dígitos).
+async function showArea(code) {
+  state.selected = null;
+  state.province = code || null;
+  state.geoLayer.setStyle(featureStyle);
+  $('panel-title').textContent = code ? state.provinces.get(code).name : 'Argentina';
+  $('panel-info').textContent = 'Cargando serie…';
+  const token = seriesGuard.next();
+  state.series = null;
+  let all;
+  try {
+    all = await loadAllSeries();
+  } catch (err) {
+    if (seriesGuard.isCurrent(token)) seriesFailed(err);
+    return;
+  }
+  // Se ignora una respuesta tardía si mientras tanto se eligió otra área.
+  if (!seriesGuard.isCurrent(token)) return;
+  state.series = { months: all.months, value: sumSeries(all.months, all.data, code) };
+  renderChart();
+}
 
 async function selectDepartment(props) {
   state.selected = { in1: props.in1, depto: props.depto, provincia: props.provincia };
+  state.province = props.in1.slice(0, 2);
+  $('sel-prov').value = state.province;
+  fillDeptoSelect(state.province, props.in1);
   state.geoLayer.setStyle(featureStyle);
   $('panel-title').textContent = `${props.depto} (${props.provincia})`;
   $('panel-info').textContent = 'Cargando serie…';
   const token = seriesGuard.next();
-  // Se descarta la serie del departamento anterior para que un cambio de mes durante la carga no pueda
+  // Se descarta la serie anterior para que un cambio de mes durante la carga no pueda
   // escribir sus números en el panel bajo el nuevo título.
   state.series = null;
   let series;
   try {
     series = await fetchJson(`serie.php?in1=${encodeURIComponent(props.in1)}`, 'serie.php');
   } catch (err) {
-    // Se ignora un fallo tardío si mientras tanto se hizo clic en otro departamento.
-    if (!seriesGuard.isCurrent(token)) return;
-    state.series = null;
-    $('panel-info').textContent = `No se pudo cargar la serie del departamento (${err.message}).`;
-    if (state.chart) state.chart.destroy();
-    state.chart = null;
+    // Se ignora un fallo tardío si mientras tanto se eligió otra área.
+    if (seriesGuard.isCurrent(token)) seriesFailed(err);
     return;
   }
-  // Se ignora una respuesta tardía si mientras tanto se hizo clic en otro departamento.
+  // Se ignora una respuesta tardía si mientras tanto se eligió otra área.
   if (!seriesGuard.isCurrent(token)) return;
   state.series = series;
   renderChart();
+}
+
+function setupChartExpand() {
+  const btn = $('chart-expand');
+  const panel = $('panel');
+  const setExpanded = (on) => {
+    panel.classList.toggle('is-expanded', on);
+    btn.setAttribute('aria-pressed', String(on));
+    const label = on ? 'Reducir gráfico' : 'Ampliar gráfico';
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
+  };
+  btn.addEventListener('click', () => setExpanded(!panel.classList.contains('is-expanded')));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setExpanded(false);
+  });
 }
 
 function chartLabels(months) {
@@ -276,9 +389,10 @@ function updatePanelInfo() {
     $('panel-info').textContent = `Sin dato para ${monthLabel(state.month)}.`;
     return;
   }
-  $('panel-info').textContent =
-    `${monthLabel(state.month)}: ${formatNumber(s.value[idx], VALUE_DECIMALS)} ${UNIT} · ` +
-    `anomalía: ${anomalyLabel(s.anomaly[idx], CLASS_LABELS).toLowerCase()}`;
+  const parts = [`${monthLabel(state.month)}: ${formatNumber(s.value[idx], VALUE_DECIMALS)} ${UNIT}`];
+  // Las clases de anomalía existen solo por departamento, no para los totales del país o de una provincia.
+  if (s.anomaly) parts.push(`anomalía: ${anomalyLabel(s.anomaly[idx], CLASS_LABELS).toLowerCase()}`);
+  $('panel-info').textContent = parts.join(' · ');
 }
 
 function renderChart() {
@@ -392,18 +506,21 @@ async function init() {
     return;
   }
   state.months = Array.isArray(months) ? months.filter((m) => /^\d{6}$/.test(m)).sort() : [];
-  createMap(geo);
+  state.map = createMap(geo);
+  setupChartExpand();
   if (!state.months.length) {
     showError('No hay meses con datos en la carpeta datos/.');
     $('map-title').textContent = '';
     return;
   }
   const latest = setupControls();
+  setupAreaFilters(geo);
   try {
     await loadMonth(latest);
   } catch (err) {
     showError(err.message);
   }
+  showArea('');
 }
 
 init();

@@ -294,7 +294,7 @@ check('index.php: 200', $status === 200);
 check('index.php: embeds config.json for app.js', isset($m[1]) && json_decode($m[1], true) === $real);
 check('index.php: title and chart label come from the config',
     strpos($out, '<h1 class="visor-title">' . htmlspecialchars($real['title']) . '</h1>') !== false
-    && strpos($out, 'aria-label="Serie mensual de ' . htmlspecialchars($real['unit']) . ' del departamento"') !== false);
+    && strpos($out, 'aria-label="Serie mensual de ' . htmlspecialchars($real['unit']) . '"') !== false);
 
 file_put_contents($root . '/config.json', json_encode(array_replace($real, ['filePrefix' => '../x'])));
 foreach (['listar.php', 'serie.php'] as $script) {

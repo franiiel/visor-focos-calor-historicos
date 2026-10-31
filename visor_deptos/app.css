@@ -96,6 +96,33 @@ body {
   min-width: 0;
 }
 .visor-panel h2 { font-size: 1.05rem; margin: 0 0 0.4rem; }
+.visor-panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+.visor-icon-btn {
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  padding: 0.25rem;
+  border: 1px solid var(--visor-border);
+  border-radius: 4px;
+  background: var(--visor-surface);
+  cursor: pointer;
+}
+.visor-icon-btn:hover { background: #f0f0f0; }
+.visor-icon-btn svg { width: 100%; height: 100%; fill: none; stroke: var(--visor-ink); stroke-width: 2; }
+.visor-icon-btn .icon-collapse,
+.visor-icon-btn[aria-pressed="true"] .icon-expand { display: none; }
+.visor-icon-btn[aria-pressed="true"] .icon-collapse { display: block; }
+
+/* Gráfico ampliado: el panel cubre el viewport; la sombra amplia oscurece la página que queda detrás. */
+.visor-panel.is-expanded {
+  position: fixed;
+  inset: 1rem;
+  z-index: 1100; /* por encima de los paneles y controles de Leaflet (hasta 1000) */
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+}
+.visor-panel.is-expanded .visor-chart-wrap { flex: 1; height: auto; min-height: 0; }
 .visor-hint { color: var(--visor-muted); font-size: 0.9rem; margin: 0 0 0.5rem; }
 .visor-chart-wrap { position: relative; height: 300px; }
 

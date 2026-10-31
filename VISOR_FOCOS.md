@@ -191,15 +191,25 @@ El gráfico de un departamento necesita todos sus meses. Si el navegador tuviera
 1. Selectores de año y mes (por defecto, el último disponible).
 2. Mapa coroplético con dos capas a elegir, **anomalía** y **focos totales**, que son los dos mapas de la imagen actual. La anomalía con una leyenda fija de cinco colores, uno por clase (de "igual o por debajo del mínimo histórico" a "por encima del máximo histórico"), y los totales con escala secuencial.
 3. Al pasar el mouse: nombre del departamento, provincia y valor. En la capa de anomalía, el texto de la clase.
-4. Al hacer clic: gráfico con la serie mensual del departamento, de 2001 en adelante. Muestra:
+4. Filtros opcionales de **provincia** y **departamento**. Sin filtro, el visor funciona igual: se hace clic en el mapa. Elegir una provincia acerca el mapa a ella, remarca sus departamentos y habilita la lista de sus departamentos; hacer clic en un departamento del mapa actualiza los dos filtros. "Todas" vuelve al país entero.
+5. Gráfico con la serie mensual, de 2001 en adelante, del área elegida:
+   - sin selección, el **total de Argentina**;
+   - con una provincia, el **total de la provincia**;
+   - con un departamento (por filtro o clic en el mapa), la **serie del departamento**.
+
+   Los totales suman los focos de los departamentos de cada mes; un mes en que ninguno tiene dato queda sin dato. Se calculan en el navegador a partir de la respuesta completa de `serie.php`, que se descarga una sola vez (unos 750 KB sin comprimir). Si ese tamaño llega a ser un problema, se puede agregar un parámetro de provincia validado con `^\d{2}$`. La clase de anomalía existe solo por departamento, así que en los totales el texto del panel muestra solo los focos.
+
+   Un botón con ícono **amplía el gráfico** a casi toda la pantalla; el mismo botón o la tecla Esc lo vuelven a su lugar.
+
+   El gráfico muestra:
    - **Focos del mes:** la cantidad de cada mes. Un mes sin dato corta la línea.
    - **Promedio por lustro:** una línea horizontal por cada bloque de cinco años, contados desde el primer año de la serie (2001–2005, 2006–2010, …). Es el promedio de los focos mensuales del bloque, solo con los meses que tienen dato. El último bloque puede estar incompleto (por ejemplo, 2026): su promedio usa los meses disponibles.
    - **Mes seleccionado:** un punto que acompaña a los selectores de año y mes.
 
-   Arriba del gráfico, un texto resume el mes elegido: focos y clase de anomalía.
+   Arriba del gráfico, un texto resume el mes elegido: focos y, para un departamento, su clase de anomalía.
 
    El gráfico **no muestra la clase** ni el promedio de referencia de cada mes (el de ese mismo mes calendario en el período `climatology`). La clase depende de la banda de ±10 % alrededor de esa media mensual y del mínimo y el máximo históricos, que no se dibujan. Las líneas de lustro muestran la tendencia de largo plazo, no la referencia de la clase: un mes por encima de su lustro puede ser "Normal" o incluso estar por debajo del promedio de su mes. La clase se lee en el texto del panel o en el mapa.
-5. Se mantienen las descargas actuales (JPG y KML) para quien las use.
+6. Se mantienen las descargas actuales (JPG y KML) para quien las use.
 
 ### Librerías
 

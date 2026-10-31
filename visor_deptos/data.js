@@ -75,6 +75,19 @@ export function lustrumMeans(months, values) {
   });
 }
 
+// Total mensual de los departamentos cuyo in1 empieza con prefix (un código de provincia de 2 dígitos,
+// o '' para todo el país). Un mes en el que ninguno de ellos tiene datos es null.
+export function sumSeries(months, data, prefix = '') {
+  const sums = months.map(() => null);
+  for (const [in1, series] of Object.entries(data)) {
+    if (!in1.startsWith(prefix)) continue;
+    series.value.forEach((v, i) => {
+      if (v !== null && v !== undefined) sums[i] = (sums[i] ?? 0) + v;
+    });
+  }
+  return sums;
+}
+
 // Ordena las solicitudes asíncronas para que solo la última pueda aplicar su resultado:
 // se toma un token con next() antes del await y después se verifica isCurrent(token).
 export function createLatestGuard() {
