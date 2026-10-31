@@ -209,7 +209,12 @@ El gráfico de un departamento necesita todos sus meses. Si el navegador tuviera
    Arriba del gráfico, un texto resume el mes elegido: focos y, para un departamento, su clase de anomalía.
 
    El gráfico **no muestra la clase** ni el promedio de referencia de cada mes (el de ese mismo mes calendario en el período `climatology`). La clase depende de la banda de ±10 % alrededor de esa media mensual y del mínimo y el máximo históricos, que no se dibujan. Las líneas de lustro muestran la tendencia de largo plazo, no la referencia de la clase: un mes por encima de su lustro puede ser "Normal" o incluso estar por debajo del promedio de su mes. La clase se lee en el texto del panel o en el mapa.
-6. Se mantienen las descargas actuales (JPG y KML) para quien las use.
+6. **Comparación por año**, debajo del mapa, para la misma área del gráfico anterior (Argentina, provincia o departamento). Los años se agregan de a uno desde una lista desplegable, sin límite; cada año elegido aparece como una etiqueta con su color y una × para quitarlo, y vuelve a la lista. Al empezar está elegido el último año. El gráfico va de enero a diciembre y muestra:
+   - **Cada año elegido:** sus focos de cada mes, como puntos unidos por una línea, con un color propio que no cambia mientras el año siga elegido. Los primeros 8 usan una paleta categórica apta para daltonismo; desde el noveno, los colores se generan girando el tono y ya no están verificados. Con muchos años el gráfico se vuelve difícil de leer: queda a criterio de quien los elige.
+   - **Promedio, máximo y mínimo históricos:** para cada mes calendario, sobre los años del período `climatology` (2001–2025) que tienen dato. Son los mismos valores con los que se calculan las clases de anomalía de un departamento; en los totales se calculan sobre la suma. Promedio en línea negra continua; máximo y mínimo en gris discontinuo.
+
+   Sin ningún año marcado, el gráfico se oculta.
+7. Se mantienen las descargas actuales (JPG y KML) para quien las use.
 
 ### Librerías
 

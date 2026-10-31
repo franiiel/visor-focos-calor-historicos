@@ -77,6 +77,20 @@ include __DIR__ . '/partials/header.php';
     </aside>
   </div>
 
+  <section class="visor-years" aria-labelledby="years-title">
+    <h2 id="years-title">Comparación por año</h2>
+    <div class="visor-years-filter">
+      <label>Agregar año
+        <select id="years-add"></select>
+      </label>
+      <ul class="visor-years-chips" id="years-chips" aria-label="Años elegidos"></ul>
+    </div>
+    <p class="visor-hint" id="years-hint"></p>
+    <div class="visor-chart-wrap" id="years-chart-wrap" hidden>
+      <canvas id="years-chart" aria-label="<?php echo h($config['unit']); ?> por mes de los años elegidos, con el promedio, el máximo y el mínimo históricos" role="img"></canvas>
+    </div>
+  </section>
+
   <p class="visor-note"><?php echo h($config['note']); ?></p>
 </main>
 

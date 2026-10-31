@@ -10,9 +10,9 @@ Los CSV mensuales se calculan desde los focos de NASA FIRMS con `tools/compute_a
 |---|---|
 | `visor_deptos/index.php` | Página del visor. Incluye `partials/header.php` y `partials/footer.php`, que son marcadores de lugar: en la integración se reemplazan por el encabezado y el pie reales del sitio. |
 | `visor_deptos/app.js`, `app.css` | Lógica (módulo ES) y estilos del visor. |
-| `visor_deptos/scales.js`, `data.js` | Funciones puras: escalas de color, leyenda, formato de números y lectura de los CSV. |
+| `visor_deptos/scales.js`, `data.js` | Funciones puras: escalas de color, leyenda, formato de números, lectura de los CSV y cálculos de los gráficos (promedio por lustro, totales por provincia y país, promedio, máximo y mínimo por mes). |
 | `visor_deptos/listar.php` | Lista los meses disponibles en `datos/`. No recibe parámetros. |
-| `visor_deptos/serie.php` | Devuelve la serie consolidada y la guarda en `cache/serie.json`. Acepta `in1` opcional (5 dígitos). |
+| `visor_deptos/serie.php` | Devuelve la serie consolidada y la guarda en `cache/serie.json`. Acepta `in1` opcional (5 dígitos). Sin `in1`, el visor la descarga una vez para los totales de Argentina y de cada provincia. |
 | `visor_deptos/config.json` | Conjunto de datos que muestra el visor: prefijo y columnas de los CSV, período de referencia y textos. Ver «Cambiar el conjunto de datos». |
 | `visor_deptos/lib/config.php`, `lib/series.php` | Lectura y validación de `config.json`; lectura de los CSV y armado de la serie. |
 | `visor_deptos/deptos.geo.json` | Geometría simplificada de los 532 departamentos (unos 380 KB). |
@@ -100,7 +100,7 @@ php tools/test/series_test.php
 php tools/test/actualizar_mes_test.php
 ```
 
-Las pruebas de Node cubren las escalas y el formato (`scales.js`), la lectura de CSV y el control de pedidos superpuestos (`data.js`), el conversor (regla de clases, media y desvío sobre los años con dato, nombres desconocidos o repetidos y lectura de un `.xlsx` de prueba), el motor de FIRMS (punto en polígono con huecos y multipolígonos, NRT solo después del archivo histórico, ceros y referencias) y el generador (determinismo y formato de los archivos). La prueba de PHP no usa frameworks: cubre `lib/series.php` (forma de la serie, prefijo y columnas configurados, huella de la carpeta `datos/` y de la configuración, reutilización del caché y error ante un CSV sin las columnas requeridas), la validación de `config.json` y las respuestas de `listar.php` y `serie.php` (forma del JSON y códigos 400, 404 y 500), que corre como subprocesos sobre una copia temporal. Termina con código 0 si todo pasa.
+Las pruebas de Node cubren las escalas y el formato (`scales.js`), la lectura de CSV, el control de pedidos superpuestos y los cálculos de los gráficos (`data.js`), el conversor (regla de clases, media y desvío sobre los años con dato, nombres desconocidos o repetidos y lectura de un `.xlsx` de prueba), el motor de FIRMS (punto en polígono con huecos y multipolígonos, NRT solo después del archivo histórico, ceros y referencias) y el generador (determinismo y formato de los archivos). La prueba de PHP no usa frameworks: cubre `lib/series.php` (forma de la serie, prefijo y columnas configurados, huella de la carpeta `datos/` y de la configuración, reutilización del caché y error ante un CSV sin las columnas requeridas), la validación de `config.json` y las respuestas de `listar.php` y `serie.php` (forma del JSON y códigos 400, 404 y 500), que corre como subprocesos sobre una copia temporal. Termina con código 0 si todo pasa.
 
 ## Servir el visor
 

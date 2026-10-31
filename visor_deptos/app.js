@@ -4,6 +4,7 @@
 import { buildScale, colorFor, legendItems, formatNumber, anomalyLabel } from './scales.js';
 import {
   parseMonthCsv, splitMonth, monthLabel, MONTH_NAMES, createLatestGuard, lustrumStart, lustrumMeans, sumSeries,
+  monthlyStats, yearValues,
 } from './data.js';
 
 const L = globalThis.L;
@@ -47,7 +48,20 @@ const state = {
   geoLayer: null,
   layersByIn1: new Map(),
   chart: null,
+  years: [], // todos los años con datos, en orden ascendente
+  yearSlots: new Map(), // año seleccionado -> posición de color (ver yearColor)
+  yearsChart: null,
 };
+
+// Paleta categórica en orden fijo (verificada para daltonismo). Un año conserva su color mientras
+// siga seleccionado, de modo que agregar o quitar otro año nunca lo vuelve a pintar.
+const YEAR_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
+
+// No hay límite de años: después de los 8 colores verificados, los tonos avanzan según el ángulo áureo para que
+// las posiciones consecutivas queden separadas. No están verificados para daltonismo; usar tantas líneas es decisión del usuario.
+function yearColor(slot) {
+  return slot < YEAR_COLORS.length ? YEAR_COLORS[slot] : `hsl(${Math.round(slot * 137.5) % 360} 65% 42%)`;
+}
 
 // Solo la última carga de mes y el último clic en un departamento pueden modificar la interfaz.
 const monthGuard = createLatestGuard();
@@ -293,6 +307,7 @@ function seriesFailed(err) {
   $('panel-info').textContent = `No se pudo cargar la serie (${err.message}).`;
   if (state.chart) state.chart.destroy();
   state.chart = null;
+  renderYearsChart();
 }
 
 // ponytail: los totales cargan serie.php completo (~750 KB) una sola vez; agregar un endpoint por provincia si resulta demasiado pesado.
@@ -315,6 +330,7 @@ async function showArea(code) {
   $('panel-info').textContent = 'Cargando serie…';
   const token = seriesGuard.next();
   state.series = null;
+  renderYearsChart();
   let all;
   try {
     all = await loadAllSeries();
@@ -340,6 +356,7 @@ async function selectDepartment(props) {
   // Se descarta la serie anterior para que un cambio de mes durante la carga no pueda
   // escribir sus números en el panel bajo el nuevo título.
   state.series = null;
+  renderYearsChart();
   let series;
   try {
     series = await fetchJson(`serie.php?in1=${encodeURIComponent(props.in1)}`, 'serie.php');
@@ -473,6 +490,127 @@ function renderChart() {
     },
   });
   updatePanelInfo();
+  renderYearsChart();
+}
+
+// ---------- Comparación de años ----------
+
+function setupYears() {
+  state.years = [...new Set(state.months.map((m) => splitMonth(m).year))].sort((a, b) => a - b);
+  const sel = $('years-add');
+  sel.addEventListener('change', () => {
+    if (sel.value) toggleYear(Number(sel.value), true);
+  });
+  // Se empieza con el año más reciente para que el gráfico sea visible desde el principio.
+  toggleYear(state.years[state.years.length - 1], true);
+}
+
+// El desplegable ofrece los años aún no elegidos; los elegidos son chips con un botón para quitarlos.
+function renderYearControls() {
+  const sel = $('years-add');
+  const free = state.years.filter((y) => !state.yearSlots.has(y));
+  sel.replaceChildren(
+    new Option(free.length ? 'Elegir…' : 'Están todos', ''),
+    ...free.map((y) => new Option(String(y), String(y))),
+  );
+  sel.value = '';
+  sel.disabled = !free.length;
+
+  const chosen = [...state.yearSlots.keys()].sort((a, b) => a - b);
+  $('years-chips').replaceChildren(...chosen.map((year) => {
+    const li = document.createElement('li');
+    const swatch = document.createElement('i');
+    swatch.className = 'visor-year-swatch';
+    swatch.style.background = yearColor(state.yearSlots.get(year));
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', `Quitar ${year}`);
+    remove.title = `Quitar ${year}`;
+    remove.addEventListener('click', () => {
+      toggleYear(year, false);
+      sel.focus(); // el botón ya no existe; se mantiene el foco del teclado en el filtro
+    });
+    li.append(swatch, String(year), remove);
+    return li;
+  }));
+}
+
+function toggleYear(year, on) {
+  if (on) {
+    const used = new Set(state.yearSlots.values());
+    let slot = 0;
+    while (used.has(slot)) slot += 1;
+    state.yearSlots.set(year, slot);
+  } else {
+    state.yearSlots.delete(year);
+  }
+  renderYearControls();
+  renderYearsChart();
+}
+
+function renderYearsChart() {
+  const s = state.series;
+  const years = [...state.yearSlots.keys()].sort((a, b) => a - b);
+  $('years-title').textContent = `Comparación por año — ${$('panel-title').textContent}`;
+  if (state.yearsChart) state.yearsChart.destroy();
+  state.yearsChart = null;
+  const wrap = $('years-chart-wrap');
+  if (!years.length || !s) {
+    wrap.hidden = true;
+    // Sin una serie, se muestra el estado propio del panel (cargando o el error).
+    $('years-hint').textContent = years.length ? $('panel-info').textContent : 'Elija uno o más años para ver el gráfico.';
+    return;
+  }
+  wrap.hidden = false;
+  $('years-hint').textContent = `Promedio, máximo y mínimo de cada mes en el período ${CLIM_PERIOD}.`;
+  const stats = monthlyStats(s.months, s.value, config.climatology.from, config.climatology.to);
+  const reference = (label, data, style) => ({ label, data, pointRadius: 0, order: 1, ...style });
+  state.yearsChart = new Chart($('years-chart'), {
+    type: 'line',
+    data: {
+      labels: MONTH_NAMES.map((name) => name.slice(0, 3)),
+      datasets: [
+        ...years.map((year) => {
+          const color = yearColor(state.yearSlots.get(year));
+          return {
+            label: String(year),
+            data: yearValues(s.months, s.value, year),
+            borderColor: color,
+            backgroundColor: color,
+            borderWidth: 2,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+          };
+        }),
+        reference(`Máximo ${CLIM_PERIOD}`, stats.max, { borderColor: '#52514e', borderWidth: 1.5, borderDash: [6, 4] }),
+        reference(`Promedio ${CLIM_PERIOD}`, stats.mean, { borderColor: '#000', backgroundColor: '#000', borderWidth: 2 }),
+        reference(`Mínimo ${CLIM_PERIOD}`, stats.min, { borderColor: '#52514e', borderWidth: 1.5, borderDash: [2, 3] }),
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, title: { display: true, text: UNIT_TITLE } },
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 14 } },
+        tooltip: {
+          filter: (item) => item.raw !== null,
+          callbacks: {
+            label: (item) => {
+              const decimals = item.dataset.label.startsWith('Promedio') ? 1 : VALUE_DECIMALS;
+              return `${item.dataset.label}: ${formatNumber(item.raw, decimals)}`;
+            },
+          },
+        },
+      },
+    },
+  });
 }
 
 function updateChartMarker() {
@@ -515,6 +653,7 @@ async function init() {
   }
   const latest = setupControls();
   setupAreaFilters(geo);
+  setupYears();
   try {
     await loadMonth(latest);
   } catch (err) {

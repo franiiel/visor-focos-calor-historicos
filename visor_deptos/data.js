@@ -88,6 +88,32 @@ export function sumSeries(months, data, prefix = '') {
   return sums;
 }
 
+// Media, mínimo y máximo de cada mes calendario en los meses from..to (AAAAMM, inclusive),
+// contando solo los meses con datos. Cada uno es un arreglo de 12, null para un mes sin datos.
+export function monthlyStats(months, values, from, to) {
+  const byMonth = Array.from({ length: 12 }, () => []);
+  months.forEach((m, i) => {
+    const v = values[i];
+    if (m >= from && m <= to && v !== null && v !== undefined) byMonth[splitMonth(m).month - 1].push(v);
+  });
+  const stat = (fn) => byMonth.map((vs) => (vs.length ? fn(vs) : null));
+  return {
+    mean: stat((vs) => vs.reduce((a, b) => a + b, 0) / vs.length),
+    min: stat((vs) => Math.min(...vs)),
+    max: stat((vs) => Math.max(...vs)),
+  };
+}
+
+// Los 12 valores mensuales de un año, null donde ese mes no tiene datos.
+export function yearValues(months, values, year) {
+  const out = Array(12).fill(null);
+  months.forEach((m, i) => {
+    const { year: y, month } = splitMonth(m);
+    if (y === year && values[i] !== undefined) out[month - 1] = values[i];
+  });
+  return out;
+}
+
 // Ordena las solicitudes asíncronas para que solo la última pueda aplicar su resultado:
 // se toma un token con next() antes del await y después se verifica isCurrent(token).
 export function createLatestGuard() {
