@@ -258,9 +258,9 @@ require __DIR__ . "/" . $argv[1];
 $viewer = __DIR__ . '/../../visor_deptos';
 $root = make_dir();
 mkdir($root . '/lib');
-mkdir($root . '/partials');
-$copied = ['index.php', 'listar.php', 'serie.php', 'config.json', 'lib/config.php', 'lib/series.php',
-    'partials/header.php', 'partials/footer.php'];
+// index.php incluye el menú y el pie de página del sitio; en los tests se usan los stubs locales.
+putenv('SEPA_ROOT=' . __DIR__ . '/../sepa_local/');
+$copied = ['index.php', 'listar.php', 'serie.php', 'config.json', 'lib/config.php', 'lib/series.php'];
 foreach ($copied as $file) {
     copy("$viewer/$file", "$root/$file");
 }
@@ -293,8 +293,10 @@ preg_match('#<script type="application/json" id="visor-config">(.*?)</script>#s'
 check('index.php: 200', $status === 200);
 check('index.php: embeds config.json for app.js', isset($m[1]) && json_decode($m[1], true) === $real);
 check('index.php: title and chart label come from the config',
-    strpos($out, '<h1 class="visor-title">' . htmlspecialchars($real['title']) . '</h1>') !== false
+    strpos($out, '<title>SEPA | ' . htmlspecialchars($real['title']) . '</title>') !== false
     && strpos($out, 'aria-label="Serie mensual de ' . htmlspecialchars($real['unit']) . '"') !== false);
+check('index.php: includes the SEPA nav and footer from $root',
+    strpos($out, '[nav.php de SEPA]') !== false && strpos($out, '[footer.php de SEPA]') !== false);
 
 file_put_contents($root . '/config.json', json_encode(array_replace($real, ['filePrefix' => '../x'])));
 foreach (['listar.php', 'serie.php'] as $script) {
