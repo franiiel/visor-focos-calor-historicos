@@ -8,7 +8,8 @@ Los CSV mensuales se calculan desde los focos de NASA FIRMS con `tools/compute_a
 
 | Ruta | Qué es |
 |---|---|
-| `visor_deptos/index.php` | Página del visor. Incluye `partials/header.php` y `partials/footer.php`, que son marcadores de lugar: en la integración se reemplazan por el encabezado y el pie reales del sitio. |
+| `visor_deptos/index.php` | Página del visor, con la plantilla de las páginas de producto de SEPA: incluye `includes/nav.php`, `includes/footer.php` y los CSS del sitio desde `$root` (`../../../`, para `/productos/focos/anomalia_deptos/`). Si la carpeta queda a otra profundidad, hay que ajustar `$root`. |
+| `tools/sepa_local/` | Stubs de `includes/` del sitio para probar la página en local. No se suben. |
 | `visor_deptos/app.js`, `app.css` | Lógica (módulo ES) y estilos del visor. |
 | `visor_deptos/scales.js`, `data.js` | Funciones puras: escalas de color, leyenda, formato de números, lectura de los CSV y cálculos de los gráficos (promedio por lustro, totales por provincia y país, promedio, máximo y mínimo por mes). |
 | `visor_deptos/listar.php` | Lista los meses disponibles en `datos/`. No recibe parámetros. |
@@ -107,10 +108,10 @@ Las pruebas de Node cubren las escalas y el formato (`scales.js`), la lectura de
 Con PHP instalado:
 
 ```sh
-php -S localhost:8000 -t visor_deptos
+SEPA_ROOT=../tools/sepa_local/ php -S localhost:8000 -t visor_deptos
 ```
 
-y abrir <http://localhost:8000/>. Antes hay que generar los datos (ver arriba). La carpeta `visor_deptos/cache/` debe permitir escritura al proceso de PHP; si no la permite, `serie.php` arma la serie en cada pedido sin guardarla.
+y abrir <http://localhost:8000/>. `SEPA_ROOT` apunta los `include` del menú y del pie de página a los stubs locales; en el servidor de SEPA no se define. En PowerShell: `$env:SEPA_ROOT='../tools/sepa_local/'; php -S localhost:8000 -t visor_deptos`. Antes hay que generar los datos (ver arriba). La carpeta `visor_deptos/cache/` debe permitir escritura al proceso de PHP; si no la permite, `serie.php` arma la serie en cada pedido sin guardarla.
 
 ## Actualizar los datos
 
