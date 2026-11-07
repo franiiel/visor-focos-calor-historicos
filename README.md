@@ -8,7 +8,7 @@ Los CSV mensuales se calculan desde los focos de NASA FIRMS con `tools/compute_a
 
 | Ruta | Qué es |
 |---|---|
-| `visor_deptos/index.php` | Página del visor, con la plantilla de las páginas de producto de SEPA: incluye `includes/nav.php`, `includes/footer.php` y los CSS del sitio desde `$root` (`../../../`, para `/productos/focos/anomalia_deptos/`). Si la carpeta queda a otra profundidad, hay que ajustar `$root`. |
+| `visor_deptos/index.php` | Página del visor, con la plantilla de las páginas de producto de SEPA: incluye `includes/nav.php`, `includes/footer.php` y los CSS del sitio desde `$root` (`../../../../`: en el sitio de SEPA la carpeta queda cuatro niveles por debajo de la raíz). Si la carpeta queda a otra profundidad, hay que ajustar `$root`. El texto de `cajaProductos` (el título del producto) está escrito en el HTML, como en las demás páginas de producto. |
 | `tools/sepa_local/` | Stubs de `includes/` del sitio para probar la página en local. No se suben. |
 | `visor_deptos/app.js`, `app.css` | Lógica (módulo ES) y estilos del visor. |
 | `visor_deptos/scales.js`, `data.js` | Funciones puras: escalas de color, leyenda, formato de números, lectura de los CSV y cálculos de los gráficos (promedio por lustro, totales por provincia y país, promedio, máximo y mínimo por mes). |

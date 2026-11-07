@@ -2,10 +2,10 @@
 // Visor departamental de focos de calor, con la plantilla de las páginas de producto del sitio de SEPA:
 // el menú, el pie de página y los estilos del sitio se incluyen desde $root.
 
-// $root es relativo a esta carpeta: /productos/focos/anomalia_deptos/ queda tres niveles por debajo de
-// la raíz del sitio. Si la carpeta se mueve a otra profundidad, hay que ajustarlo. SEPA_ROOT solo se
-// define en local, para usar los stubs de tools/sepa_local/.
-$root = getenv('SEPA_ROOT') ?: '../../../';
+// $root es relativo a esta carpeta, que en el sitio de SEPA queda cuatro niveles por debajo de la raíz.
+// Si la carpeta se mueve a otra profundidad, hay que ajustarlo. SEPA_ROOT solo se define en local,
+// para usar los stubs de tools/sepa_local/.
+$root = getenv('SEPA_ROOT') ?: '../../../../';
 $seccion = 'Productos';
 
 // Invalidación de caché: la versión cambia cada vez que cambia el archivo.
@@ -73,7 +73,7 @@ header('Content-Type: text/html; charset=utf-8');
 
             <div class="cajaProductos">
                 <h2><a href="<?php echo $root; ?>productos/" class="seccion">Focos de calor</a><br>
-                <?php echo h($config['title']); ?></h2>
+                Focos de calor por departamento</h2>
             </div>
 
             <div class="clearfix"></div>
