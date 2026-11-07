@@ -83,6 +83,25 @@ FIRMS_MAP_KEY=xxxxxxxx
 - Si algo falla (red, clave, respuesta que no es un CSV de FIRMS), termina con código 1, escribe el error en stderr y no deja ningún archivo. Si sale bien, escribe una línea con el mes, los focos asignados y los que quedaron fuera de todo departamento.
 - Solo corre desde la línea de comandos. Está en `lib/`, que no se sirve por web.
 
+## Actualización mensual manual (`procesar_focos.exe`)
+
+Para una PC con Windows sin Node ni PHP. Se entrega `procesar_focos.exe` junto a una carpeta `datos/` con el histórico `focos_AAAAMM.csv` (hace falta para calcular la anomalía).
+
+1. Descargar de NASA FIRMS los focos MODIS de Argentina de **un solo mes** en CSV (si viene en `.zip`, descomprimirlo).
+2. Copiar el o los CSV (`fire_archive_*.csv`, `fire_nrt_*.csv`) en `datos/`.
+3. Hacer doble clic en `procesar_focos.exe`. Escribe `datos/focos_AAAAMM.csv` y mueve las descargas a `datos/procesados/`.
+4. Subir `focos_AAAAMM.csv` a la carpeta `datos/` del visor.
+
+Si la descarga tiene focos de más de un mes, no es un CSV de FIRMS o falta algún CSV del histórico, muestra el error y no escribe nada. Da exactamente el mismo archivo que `actualizar_mes.php --csv`. Para probarlo sin compilar: `node tools/procesar_mes.mjs --datos <carpeta>` (además acepta `--geojson` y `--config`).
+
+Compilarlo (en Windows, necesita `tools/raw/DEPTOS-PROV.geojson`; usa esbuild y postject con versión fija vía npx):
+
+```sh
+node tools/build_exe.mjs   # -> dist/procesar_focos.exe, con la geometría y config.json embebidos
+```
+
+El ejecutable es una copia de `node.exe` con el script adentro, por eso pesa ~100 MB y su firma digital queda inválida: Windows puede mostrar un aviso la primera vez. Si cambia `config.json`, hay que volver a compilarlo.
+
 ## Convertir la planilla de SEPA
 
 ```sh

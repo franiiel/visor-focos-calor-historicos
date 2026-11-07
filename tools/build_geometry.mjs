@@ -69,7 +69,7 @@ export function normalizeFeatures(collection) {
 
 // Ejecuta npx mediante el CLI de npm incluido con el Node actual, sin shell, para que
 // las rutas con espacios se pasen de forma segura en todas las plataformas.
-function runNpx(args) {
+export function runNpx(args) {
   const npxCli = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js');
   const [cmd, cmdArgs] = existsSync(npxCli)
     ? [process.execPath, [npxCli, ...args]]

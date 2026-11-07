@@ -18,3 +18,6 @@ DL_FIRE_*/
 
 # Reference statistics written by tools/compute_anomalies.mjs
 visor_deptos/datos/referencia.csv
+
+# Windows executable built by tools/build_exe.mjs
+dist/

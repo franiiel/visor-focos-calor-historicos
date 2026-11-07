@@ -257,6 +257,10 @@ FIRMS_MAP_KEY=xxxxxxxx
 - **Rehacer un mes:** `--mes AAAAMM`. Con `--csv archivo.csv` lee una descarga hecha a mano en lugar de usar la API.
 - **NRT y datos definitivos:** el NRT puede diferir un poco de los datos definitivos (`MODIS_SP`), que FIRMS publica dos o tres meses después. Si SEPA quiere los definitivos, alcanza con una segunda línea en el cron: `--source MODIS_SP --mes <de hace tres meses>`. Rehacer un mes de 2001–2025 no recalcula las clases de los otros meses: para eso se vuelve a correr el motor de Node.
 
+### Actualización mensual manual
+
+Si el cron no se puede instalar, el mes se puede calcular a mano en una PC con Windows, sin instalar nada: se descarga de FIRMS el CSV MODIS del mes, se lo copia en la carpeta `datos/` que está junto a `procesar_focos.exe` y se hace doble clic. El programa escribe `datos/focos_AAAAMM.csv`, que después se sube al visor, y mueve la descarga a `datos/procesados/`. Aplica las mismas reglas que el cron y da el mismo archivo. La carpeta `datos/` tiene que tener el histórico (para la referencia 2001–2025). Si la descarga tiene focos de más de un mes, no escribe nada, para no reemplazar un mes completo por uno parcial. Es un paso manual mensual, justo lo que el cron evita (ver «Idea central»), así que conviene usarlo solo mientras no haya cron.
+
 ## Riesgos
 
 - **Formato de entrega mensual sin definir.** Los datos existen (ver "Datos recibidos de SEPA"), pero hoy viven en una planilla que se completa a mano, y PHP no lee `.xlsx` sin una librería externa. Lo ideal es que SEPA exporte cada mes el CSV en el formato acordado. Si no puede, alguien tiene que correr el script de conversión todos los meses, y eso es justo lo que el diseño busca evitar (ver "Idea central"). El motor de FIRMS saca la planilla del medio, y el cron mensual (ver «Actualización mensual automática») saca el paso manual. Falta que SEPA instale el cron, saque un MAP_KEY de FIRMS y confirme que el servidor puede consultar la API (ya descarga de FIRMS el CSV del visor de 5 días).
