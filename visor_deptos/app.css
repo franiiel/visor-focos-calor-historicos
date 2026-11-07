@@ -190,8 +190,9 @@
   .visor-controls { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: flex-end; }
   .visor-controls select { width: auto; min-width: 7rem; }
   .visor-layout { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
-  /* El mapa conserva su alto aunque la columna derecha sea más alta, para que la leyenda quede a la vista. */
-  .visor-map-wrap { grid-row: span 2; align-self: start; }
+  /* El mapa conserva su alto aunque la columna derecha sea más alta, para que la leyenda quede a la vista,
+     y acompaña el scroll mientras se recorren los gráficos (sticky también sirve de contenedor a la leyenda). */
+  .visor-map-wrap { grid-row: span 2; align-self: start; position: sticky; top: 1rem; }
   #years-expand { display: block; }
   .visor-legend {
     left: 0.6rem;
