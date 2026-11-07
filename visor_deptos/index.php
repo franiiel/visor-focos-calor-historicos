@@ -124,10 +124,16 @@ header('Content-Type: text/html; charset=utf-8');
         <canvas id="chart" aria-label="Serie mensual de <?php echo h($config['unit']); ?>" role="img"></canvas>
       </div>
     </aside>
-  </div>
 
-  <section class="visor-years" aria-labelledby="years-title">
-    <h2 id="years-title">Comparación por año</h2>
+  <section class="visor-years" id="years" aria-labelledby="years-title">
+    <div class="visor-panel-head">
+      <h2 id="years-title">Comparación por año</h2>
+      <button type="button" class="visor-icon-btn" id="years-expand" aria-pressed="false"
+              aria-label="Ampliar gráfico" title="Ampliar gráfico">
+        <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        <svg class="icon-collapse" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+      </button>
+    </div>
     <div class="visor-years-filter">
       <label>Agregar año
         <select id="years-add"></select>
@@ -139,6 +145,7 @@ header('Content-Type: text/html; charset=utf-8');
       <canvas id="years-chart" aria-label="<?php echo h($config['unit']); ?> por mes de los años elegidos, con el promedio, el máximo y el mínimo históricos" role="img"></canvas>
     </div>
   </section>
+  </div>
 
   <p class="visor-note"><?php echo h($config['note']); ?></p>
 </main>

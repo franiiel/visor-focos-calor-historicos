@@ -22,15 +22,18 @@
 .visor-title { font-size: 1.4rem; margin: 0.25rem 0; }
 .visor-subtitle { margin: 0 0 0.75rem; color: var(--visor-muted); }
 
+/* Pantallas angostas: dos columnas que nunca superan el ancho disponible. Un <select> toma el ancho de
+   su opción más larga (p. ej. un departamento de nombre largo), así que se lo limita a su columna. */
 .visor-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
-  align-items: flex-end;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+  align-items: end;
   margin-bottom: 0.75rem;
 }
-.visor-controls label { display: flex; flex-direction: column; font-size: 0.85rem; gap: 0.2rem; }
-.visor-controls select { font-size: 1rem; padding: 0.3rem; min-width: 7rem; }
+.visor-controls label { display: flex; flex-direction: column; font-size: 0.85rem; gap: 0.2rem; min-width: 0; }
+.visor-controls select { font-size: 1rem; padding: 0.3rem; width: 100%; max-width: 100%; }
+.visor-controls .visor-layer { grid-column: 1 / -1; }
 .visor-layer { border: 0; padding: 0; margin: 0; display: flex; gap: 0.75rem; flex-wrap: wrap; }
 .visor-layer legend { font-size: 0.85rem; padding: 0; margin-bottom: 0.2rem; }
 .visor-layer label { flex-direction: row; align-items: center; font-size: 1rem; gap: 0.3rem; }
@@ -55,16 +58,24 @@
   background: #eef2f3;
 }
 
+/* La leyenda flota sobre el mapa. En pantallas angostas va compacta abajo a la derecha, sobre el
+   Atlántico, y por encima de la atribución de Leaflet, que ahí ocupa dos líneas. */
 .visor-legend {
-  margin-top: 0.5rem;
+  position: absolute;
+  right: 0.4rem;
+  bottom: 2.6rem;
+  z-index: 500; /* sobre las capas de Leaflet, debajo de sus controles (1000) */
   background: var(--visor-surface);
   border: 1px solid var(--visor-border);
   border-radius: 4px;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.85rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.68rem;
+  line-height: 1.2;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 1rem;
+  flex-direction: column;
+  gap: 0.15rem;
+  max-width: 9.5rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 .visor-legend-title { width: 100%; font-weight: 600; }
 .visor-legend-item { display: flex; align-items: center; gap: 0.4rem; }
@@ -101,7 +112,8 @@
 .visor-icon-btn[aria-pressed="true"] .icon-collapse { display: block; }
 
 /* Gráfico ampliado: el panel cubre el viewport; la sombra amplia oscurece la página que queda detrás. */
-.visor-panel.is-expanded {
+.visor-panel.is-expanded,
+.visor-years.is-expanded {
   position: fixed;
   inset: 1rem;
   z-index: 1100; /* por encima de los paneles y controles de Leaflet (hasta 1000) */
@@ -109,12 +121,15 @@
   flex-direction: column;
   box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
 }
-.visor-panel.is-expanded .visor-chart-wrap { flex: 1; height: auto; min-height: 0; }
+.visor-panel.is-expanded .visor-chart-wrap,
+.visor-years.is-expanded .visor-chart-wrap { flex: 1; height: auto; min-height: 0; }
 .visor-hint { color: var(--visor-muted); font-size: 0.9rem; margin: 0 0 0.5rem; }
 .visor-chart-wrap { position: relative; height: 300px; }
 
+/* Dentro de la grilla: el espacio con el panel lo da el gap. */
 .visor-years {
-  margin-top: 1rem;
+  container: years / inline-size;
+  min-width: 0;
   background: var(--visor-surface);
   border: 1px solid var(--visor-border);
   border-radius: 4px;
@@ -123,8 +138,22 @@
 .visor-years h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .visor-years-filter { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: flex-end; margin-bottom: 0.5rem; }
 .visor-years-filter label { display: flex; flex-direction: column; font-size: 0.85rem; gap: 0.2rem; }
-.visor-years-filter select { font-size: 1rem; padding: 0.3rem; min-width: 9rem; }
-.visor-years-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; list-style: none; margin: 0; padding: 0; }
+.visor-years-filter select { font-size: 1rem; padding: 0.3rem; min-width: 9rem; max-width: 100%; }
+/* Los chips van en su propia fila con lugar reservado para dos líneas (alto de un chip: 1.9rem + 2px
+   de borde): entran al menos 2 por línea desde 320px, así que hasta 4 años la sección no cambia de alto
+   ni desplaza la página. Con más años puede crecer; es aceptado. Cuando los 4 entran en una sola línea
+   (~394px con la fuente actual, más margen), se reserva una sola línea; ver la container query. */
+.visor-years-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex-basis: 100%;
+  min-height: calc(2 * (1.9rem + 2px) + 0.4rem);
+}
 .visor-years-chips li {
   display: inline-flex;
   align-items: center;
@@ -146,22 +175,33 @@
 }
 .visor-years-chips button:hover { background: #ececec; }
 .visor-year-swatch { width: 0.7rem; height: 0.7rem; border-radius: 50%; flex: none; }
+@container years (min-width: 26rem) {
+  .visor-years-chips { min-height: calc(1.9rem + 2px); }
+}
 .visor-years .visor-chart-wrap[hidden] { display: none; }
+/* En pantallas angostas la comparación queda como estaba, sin botón para ampliar. */
+#years-expand { display: none; }
 
 .visor-note { color: var(--visor-muted); font-size: 0.85rem; margin-top: 1rem; }
 
-/* Pantallas anchas: mapa y panel lado a lado, leyenda flotando sobre el mapa. */
+/* Pantallas anchas: mapa a la izquierda; serie y comparación por año apiladas a la derecha. */
 @media (min-width: 900px) {
+  /* Hay lugar: los filtros vuelven a ir en una fila, cada uno con su ancho natural. */
+  .visor-controls { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: flex-end; }
+  .visor-controls select { width: auto; min-width: 7rem; }
   .visor-layout { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  /* El mapa conserva su alto aunque la columna derecha sea más alta, para que la leyenda quede a la vista. */
+  .visor-map-wrap { grid-row: span 2; align-self: start; }
+  #years-expand { display: block; }
   .visor-legend {
-    position: absolute;
     left: 0.6rem;
+    right: auto;
     bottom: 1.6rem;
-    z-index: 500;
-    flex-direction: column;
-    flex-wrap: nowrap;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    line-height: normal;
+    gap: 0.25rem;
     max-width: 16rem;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
   }
   .visor-map { height: 640px; }
   .visor-chart-wrap { height: 380px; }

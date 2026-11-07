@@ -371,9 +371,9 @@ async function selectDepartment(props) {
   renderChart();
 }
 
-function setupChartExpand() {
-  const btn = $('chart-expand');
-  const panel = $('panel');
+function setupChartExpand(btnId, panelId) {
+  const btn = $(btnId);
+  const panel = $(panelId);
   const setExpanded = (on) => {
     panel.classList.toggle('is-expanded', on);
     btn.setAttribute('aria-pressed', String(on));
@@ -645,7 +645,8 @@ async function init() {
   }
   state.months = Array.isArray(months) ? months.filter((m) => /^\d{6}$/.test(m)).sort() : [];
   state.map = createMap(geo);
-  setupChartExpand();
+  setupChartExpand('chart-expand', 'panel');
+  setupChartExpand('years-expand', 'years');
   if (!state.months.length) {
     showError('No hay meses con datos en la carpeta datos/.');
     $('map-title').textContent = '';
