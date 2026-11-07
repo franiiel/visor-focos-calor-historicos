@@ -144,9 +144,9 @@ El visor no está atado a los focos MODIS. Todo lo que depende del conjunto de d
   "climatology": { "from": "200101", "to": "202512" },
   "anomalyClasses": [
     "Igual o por debajo del mínimo histórico",
-    "Por debajo de lo normal",
-    "Normal",
-    "Por encima de lo normal",
+    "Por debajo del promedio (-10 %)",
+    "Promedio",
+    "Por encima del promedio (+10 %)",
     "Por encima del máximo histórico"
   ],
   "note": "Anomalía: …"
