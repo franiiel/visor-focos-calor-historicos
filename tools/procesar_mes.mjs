@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 // Actualización mensual manual (lo que se empaqueta como procesar_focos.exe, ver tools/build_exe.mjs).
-// Toma el CSV de NASA FIRMS MODIS de un mes que está en la carpeta datos/, cuenta los focos por
+// Toma la descarga de NASA FIRMS MODIS de un mes que está en la carpeta nasa/, cuenta los focos por
 // departamento, clasifica el mes y escribe datos/<filePrefix>_AAAAMM.csv. Debe producir exactamente lo
 // mismo que monthly_build de visor_deptos/lib/actualizar_mes.php: mantener ambos sincronizados.
 //
 // Uso:
-//   procesar_focos.exe                         (busca datos/ junto al ejecutable)
-//   node tools/procesar_mes.mjs [--datos visor_deptos/datos]
+//   procesar_focos.exe                         (usa nasa/ y datos/ junto al ejecutable)
+//   node tools/procesar_mes.mjs --nasa <carpeta> [--datos visor_deptos/datos]
 //        [--geojson tools/raw/DEPTOS-PROV.geojson] [--config visor_deptos/config.json]
 //
-// Todo .csv de datos/ que no sea un archivo mensual ni referencia.csv se toma como descarga de FIRMS;
-// los fire_nrt_* cuentan solo después del último día de los demás (misma regla que compute_anomalies.mjs).
-// Al terminar, las descargas se mueven a datos/procesados/ para que no se mezclen con las del mes siguiente.
+// Todo .csv de nasa/, también dentro de subcarpetas (la carpeta DL_FIRE_* de FIRMS se puede dejar tal
+// como viene), es una descarga de FIRMS; los fire_nrt_* cuentan solo después del último día de los
+// demás (misma regla que compute_anomalies.mjs). Al terminar, todo lo que había en nasa/ se mueve a
+// nasa/procesados/ para que no se mezcle con la descarga del mes siguiente.
 
-import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline';
 import sea from 'node:sea';
 import { fileURLToPath } from 'node:url';
@@ -41,24 +42,28 @@ function readMonthValues(text, name, config) {
   return values;
 }
 
-// Procesa la descarga de FIRMS de datosDir. Devuelve { month, name, assigned, outside }.
-// Valida todo antes de escribir: ante un error la carpeta queda como estaba.
-export function processFolder(datosDir, { geojson, config }) {
-  const monthly = new RegExp(`^${config.filePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_(\\d{6})\\.csv$`);
-  const csvs = readdirSync(datosDir).filter((f) => f.toLowerCase().endsWith('.csv')).sort();
-  const downloads = csvs.filter((f) => !monthly.test(f) && f !== 'referencia.csv');
-  if (!downloads.length) throw new Error(`No hay ningún CSV de NASA en ${datosDir}`);
+const PROCESSED = 'procesados';
 
+// Procesa la descarga de FIRMS de nasaDir y escribe el mes en datosDir. Devuelve { month, name,
+// assigned, outside }. Valida todo antes de escribir: ante un error las carpetas quedan como estaban.
+export function processMonth({ nasaDir, datosDir, geojson, config }) {
+  if (!existsSync(nasaDir)) throw new Error(`No existe la carpeta ${nasaDir}: créela y copie ahí la descarga de NASA`);
+  const downloads = readdirSync(nasaDir, { recursive: true })
+    .filter((f) => f.toLowerCase().endsWith('.csv') && f.split(sep)[0] !== PROCESSED)
+    .sort();
+  if (!downloads.length) throw new Error(`No hay ningún CSV de NASA en ${nasaDir}`);
+
+  const isNrt = (f) => basename(f).startsWith('fire_nrt');
   const read = (f) => {
     try {
-      return readFirms(readFileSync(join(datosDir, f), 'utf8'));
+      return readFirms(readFileSync(join(nasaDir, f), 'utf8'));
     } catch (err) {
       throw new Error(`${f}: ${err.message}`);
     }
   };
-  const points = downloads.filter((f) => !f.startsWith('fire_nrt')).flatMap(read);
+  const points = downloads.filter((f) => !isNrt(f)).flatMap(read);
   const lastArchive = points.reduce((a, p) => (p.date > a ? p.date : a), '');
-  for (const f of downloads.filter((f) => f.startsWith('fire_nrt'))) points.push(...read(f).filter((p) => p.date > lastArchive));
+  for (const f of downloads.filter(isNrt)) points.push(...read(f).filter((p) => p.date > lastArchive));
   if (!points.length) throw new Error(`${downloads.join(', ')} no tiene focos`);
 
   const months = [...new Set(points.map((p) => p.date.slice(0, 7)))].sort();
@@ -81,7 +86,8 @@ export function processFolder(datosDir, { geojson, config }) {
   const { from, to } = config.climatology;
   const reference = new Map();
   const add = (in1, v) => reference.set(in1, [...(reference.get(in1) ?? []), v]);
-  for (const f of csvs) {
+  const monthly = new RegExp(`^${config.filePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_(\\d{6})\\.csv$`);
+  for (const f of readdirSync(datosDir).sort()) {
     const m = f.match(monthly)?.[1];
     if (!m || m === month || m.slice(4) !== month.slice(4) || m < from || m > to) continue;
     for (const [in1, v] of readMonthValues(readFileSync(join(datosDir, f), 'utf8'), f, config)) add(in1, v);
@@ -106,8 +112,15 @@ export function processFolder(datosDir, { geojson, config }) {
     rmSync(tmp, { force: true });
     throw new Error(`No se pudo escribir ${name} en ${datosDir}: ${err.message}`);
   }
-  mkdirSync(join(datosDir, 'procesados'), { recursive: true });
-  for (const f of downloads) renameSync(join(datosDir, f), join(datosDir, 'procesados', f));
+  // Se mueve todo lo de nasa/ (también el Readme.txt de FIRMS). Una descarga con el mismo nombre que
+  // otra ya procesada es la misma descarga reprocesada: reemplaza a la copia anterior.
+  const processed = join(nasaDir, PROCESSED);
+  mkdirSync(processed, { recursive: true });
+  for (const entry of readdirSync(nasaDir)) {
+    if (entry === PROCESSED) continue;
+    rmSync(join(processed, entry), { recursive: true, force: true });
+    renameSync(join(nasaDir, entry), join(processed, entry));
+  }
   return { month, name, assigned: points.length - outside, outside };
 }
 
@@ -116,6 +129,7 @@ export function processFolder(datosDir, { geojson, config }) {
 function parseArgs(argv) {
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const opts = {
+    nasa: null,
     datos: join(repoRoot, 'visor_deptos', 'datos'),
     geojson: join(repoRoot, 'tools', 'raw', 'DEPTOS-PROV.geojson'),
     config: join(repoRoot, 'visor_deptos', 'config.json'),
@@ -125,6 +139,7 @@ function parseArgs(argv) {
     if (!(key in opts) || argv[i + 1] === undefined) throw new Error(`Unknown or incomplete option: ${argv[i]}`);
     opts[key] = argv[i + 1];
   }
+  if (!opts.nasa) throw new Error('Missing --nasa <folder with the FIRMS download>');
   return opts;
 }
 
@@ -133,14 +148,19 @@ const parseJson = (text) => JSON.parse(text.replace(/^﻿/, ''));
 
 function main() {
   if (sea.isSea()) {
-    // La geometría y config.json van embebidos en el .exe; datos/ está junto al ejecutable.
-    return processFolder(join(dirname(process.execPath), 'datos'), {
+    // La geometría y config.json van embebidos en el .exe; nasa/ y datos/ están junto al ejecutable.
+    const here = dirname(process.execPath);
+    return processMonth({
+      nasaDir: join(here, 'nasa'),
+      datosDir: join(here, 'datos'),
       geojson: parseJson(sea.getAsset('geojson', 'utf8')),
       config: parseJson(sea.getAsset('config', 'utf8')),
     });
   }
   const opts = parseArgs(process.argv.slice(2));
-  return processFolder(resolve(opts.datos), {
+  return processMonth({
+    nasaDir: resolve(opts.nasa),
+    datosDir: resolve(opts.datos),
     geojson: parseJson(readFileSync(resolve(opts.geojson), 'utf8')),
     config: parseJson(readFileSync(resolve(opts.config), 'utf8')),
   });
@@ -152,7 +172,7 @@ if (sea.isSea() || (process.argv[1] && resolve(process.argv[1]) === fileURLToPat
   try {
     const { month, name, assigned, outside } = main();
     console.log(`${month}: ${assigned} focos asignados, ${outside} fuera de todo departamento -> datos/${name}`);
-    console.log('Las descargas de NASA se movieron a datos/procesados/.');
+    console.log('La descarga de NASA se movió a nasa/procesados/.');
   } catch (err) {
     console.error(`Error: ${err.message}`);
     code = 1;

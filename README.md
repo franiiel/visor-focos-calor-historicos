@@ -85,14 +85,20 @@ FIRMS_MAP_KEY=xxxxxxxx
 
 ## Actualización mensual manual (`procesar_focos.exe`)
 
-Para una PC con Windows sin Node ni PHP. Se entrega `procesar_focos.exe` junto a una carpeta `datos/` con el histórico `focos_AAAAMM.csv` (hace falta para calcular la anomalía).
+Para una PC con Windows sin Node ni PHP. Se entrega `procesar_focos.exe` junto a dos carpetas:
+
+```
+procesar_focos.exe
+nasa/     <- acá se copia la descarga de FIRMS
+datos/    <- histórico focos_AAAAMM.csv (para la anomalía) y el mes nuevo, lo que se sube al visor
+```
 
 1. Descargar de NASA FIRMS los focos MODIS de Argentina de **un solo mes** en CSV (si viene en `.zip`, descomprimirlo).
-2. Copiar el o los CSV (`fire_archive_*.csv`, `fire_nrt_*.csv`) en `datos/`.
-3. Hacer doble clic en `procesar_focos.exe`. Escribe `datos/focos_AAAAMM.csv` y mueve las descargas a `datos/procesados/`.
+2. Copiar la descarga en `nasa/`: los CSV sueltos o la carpeta `DL_FIRE_*` entera, tal como viene.
+3. Hacer doble clic en `procesar_focos.exe`. Escribe `datos/focos_AAAAMM.csv` y mueve la descarga a `nasa/procesados/`.
 4. Subir `focos_AAAAMM.csv` a la carpeta `datos/` del visor.
 
-Si la descarga tiene focos de más de un mes, no es un CSV de FIRMS o falta algún CSV del histórico, muestra el error y no escribe nada. Da exactamente el mismo archivo que `actualizar_mes.php --csv`. Para probarlo sin compilar: `node tools/procesar_mes.mjs --datos <carpeta>` (además acepta `--geojson` y `--config`).
+Si la descarga tiene focos de más de un mes, no es un CSV de FIRMS o falta algún CSV del histórico, muestra el error y no escribe ni mueve nada. Da exactamente el mismo archivo que `actualizar_mes.php --csv`. Para probarlo sin compilar: `node tools/procesar_mes.mjs --nasa <carpeta> [--datos <carpeta>]` (además acepta `--geojson` y `--config`).
 
 Compilarlo (en Windows, necesita `tools/raw/DEPTOS-PROV.geojson`; usa esbuild y postject con versión fija vía npx):
 

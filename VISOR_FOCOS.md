@@ -259,7 +259,7 @@ FIRMS_MAP_KEY=xxxxxxxx
 
 ### Actualización mensual manual
 
-Si el cron no se puede instalar, el mes se puede calcular a mano en una PC con Windows, sin instalar nada: se descarga de FIRMS el CSV MODIS del mes, se lo copia en la carpeta `datos/` que está junto a `procesar_focos.exe` y se hace doble clic. El programa escribe `datos/focos_AAAAMM.csv`, que después se sube al visor, y mueve la descarga a `datos/procesados/`. Aplica las mismas reglas que el cron y da el mismo archivo. La carpeta `datos/` tiene que tener el histórico (para la referencia 2001–2025). Si la descarga tiene focos de más de un mes, no escribe nada, para no reemplazar un mes completo por uno parcial. Es un paso manual mensual, justo lo que el cron evita (ver «Idea central»), así que conviene usarlo solo mientras no haya cron.
+Si el cron no se puede instalar, el mes se puede calcular a mano en una PC con Windows, sin instalar nada: se descarga de FIRMS el CSV MODIS del mes, se lo copia (o la carpeta de la descarga entera) en la carpeta `nasa/` que está junto a `procesar_focos.exe` y se hace doble clic. El programa escribe `datos/focos_AAAAMM.csv`, que después se sube al visor, y mueve la descarga a `nasa/procesados/`. Así `datos/` tiene solo lo que va al visor. Aplica las mismas reglas que el cron y da el mismo archivo. La carpeta `datos/` tiene que tener el histórico (para la referencia 2001–2025). Si la descarga tiene focos de más de un mes, no escribe nada, para no reemplazar un mes completo por uno parcial. Es un paso manual mensual, justo lo que el cron evita (ver «Idea central»), así que conviene usarlo solo mientras no haya cron.
 
 ## Riesgos
 
