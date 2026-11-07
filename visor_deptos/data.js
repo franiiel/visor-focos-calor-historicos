@@ -123,3 +123,16 @@ export function createLatestGuard() {
     isCurrent: (token) => token === latest,
   };
 }
+
+// CSV estándar (coma y punto decimal, como los CSV de datos/): una fila por etiqueta y una columna por serie.
+export function chartCsv(labels, datasets) {
+  const cell = (v) => {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'number') return String(Math.round(v * 100) / 100);
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const rows = [['mes', ...datasets.map((d) => d.label)]];
+  labels.forEach((label, i) => rows.push([label, ...datasets.map((d) => d.data[i])]));
+  return rows.map((r) => r.map(cell).join(',')).join('\n') + '\n';
+}

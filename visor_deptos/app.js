@@ -4,7 +4,7 @@
 import { buildScale, colorFor, legendItems, formatNumber, anomalyLabel } from './scales.js';
 import {
   parseMonthCsv, splitMonth, monthLabel, MONTH_NAMES, createLatestGuard, lustrumStart, lustrumMeans, sumSeries,
-  monthlyStats, yearValues,
+  monthlyStats, yearValues, chartCsv,
 } from './data.js';
 
 const L = globalThis.L;
@@ -387,6 +387,63 @@ function setupChartExpand(btnId, panelId) {
   });
 }
 
+function downloadFile(name, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// El canvas de Chart.js es transparente; se copia sobre fondo blanco para que la imagen se lea en cualquier visor.
+function downloadPng(chart, name) {
+  const src = chart.canvas;
+  const out = document.createElement('canvas');
+  out.width = src.width;
+  out.height = src.height;
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(src, 0, 0);
+  out.toBlob((blob) => downloadFile(name, blob), 'image/png');
+}
+
+function areaCode() {
+  return state.selected ? state.selected.in1 : state.province || 'argentina';
+}
+
+// Mientras carga otra área el gráfico anterior sigue en pantalla con state.series en null: no se descarga.
+function setupDownloads() {
+  const csv = (labels, datasets) => new Blob([chartCsv(labels, datasets)], { type: 'text/csv' });
+  $('chart-csv').addEventListener('click', () => {
+    const s = state.series;
+    if (!s || !state.chart) return;
+    // Se excluye el marcador del mes seleccionado (dataset 2); la anomalía existe solo por departamento.
+    const datasets = state.chart.data.datasets.slice(0, 2);
+    if (s.anomaly) datasets.push({ label: 'Anomalía', data: s.anomaly });
+    downloadFile(`focos_serie_${areaCode()}.csv`, csv(s.months, datasets));
+  });
+  $('chart-png').addEventListener('click', () => {
+    if (state.series && state.chart) downloadPng(state.chart, `focos_serie_${areaCode()}.png`);
+  });
+  $('years-csv').addEventListener('click', () => {
+    const c = state.yearsChart;
+    if (state.series && c) downloadFile(`focos_comparacion_${areaCode()}.csv`, csv(c.data.labels, c.data.datasets));
+  });
+  $('years-png').addEventListener('click', () => {
+    if (state.series && state.yearsChart) downloadPng(state.yearsChart, `focos_comparacion_${areaCode()}.png`);
+  });
+  // <details> no se cierra solo: se cierra al elegir una opción, al hacer clic afuera o con Escape.
+  const menus = [...document.querySelectorAll('.visor-download')];
+  document.addEventListener('click', (e) => {
+    for (const d of menus) if (!d.contains(e.target) || e.target.closest('.visor-download-menu')) d.open = false;
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') for (const d of menus) d.open = false;
+  });
+}
+
 function chartLabels(months) {
   return months.map((m) => {
     const { year, month } = splitMonth(m);
@@ -647,6 +704,7 @@ async function init() {
   state.map = createMap(geo);
   setupChartExpand('chart-expand', 'panel');
   setupChartExpand('years-expand', 'years');
+  setupDownloads();
   if (!state.months.length) {
     showError('No hay meses con datos en la carpeta datos/.');
     $('map-title').textContent = '';

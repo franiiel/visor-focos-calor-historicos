@@ -112,11 +112,22 @@ header('Content-Type: text/html; charset=utf-8');
     <aside class="visor-panel" id="panel">
       <div class="visor-panel-head">
         <h2 id="panel-title">Argentina</h2>
-        <button type="button" class="visor-icon-btn" id="chart-expand" aria-pressed="false"
-                aria-label="Ampliar gráfico" title="Ampliar gráfico">
-          <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
-          <svg class="icon-collapse" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
-        </button>
+        <div class="visor-panel-actions">
+          <details class="visor-download">
+            <summary class="visor-icon-btn" aria-label="Descargar" title="Descargar">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+            </summary>
+            <div class="visor-download-menu">
+              <button type="button" id="chart-csv">Datos (CSV)</button>
+              <button type="button" id="chart-png">Imagen (PNG)</button>
+            </div>
+          </details>
+          <button type="button" class="visor-icon-btn" id="chart-expand" aria-pressed="false"
+                  aria-label="Ampliar gráfico" title="Ampliar gráfico">
+            <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+            <svg class="icon-collapse" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+          </button>
+        </div>
       </div>
       <p id="panel-info" class="visor-hint">Cargando serie…</p>
       <p class="visor-hint">Elija una provincia o un departamento en el mapa para ver su serie.</p>
@@ -128,11 +139,22 @@ header('Content-Type: text/html; charset=utf-8');
   <section class="visor-years" id="years" aria-labelledby="years-title">
     <div class="visor-panel-head">
       <h2 id="years-title">Comparación por año</h2>
-      <button type="button" class="visor-icon-btn" id="years-expand" aria-pressed="false"
-              aria-label="Ampliar gráfico" title="Ampliar gráfico">
-        <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
-        <svg class="icon-collapse" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
-      </button>
+      <div class="visor-panel-actions">
+        <details class="visor-download">
+          <summary class="visor-icon-btn" aria-label="Descargar" title="Descargar">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+          </summary>
+          <div class="visor-download-menu">
+            <button type="button" id="years-csv">Datos (CSV)</button>
+            <button type="button" id="years-png">Imagen (PNG)</button>
+          </div>
+        </details>
+        <button type="button" class="visor-icon-btn" id="years-expand" aria-pressed="false"
+                aria-label="Ampliar gráfico" title="Ampliar gráfico">
+          <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+          <svg class="icon-collapse" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+        </button>
+      </div>
     </div>
     <div class="visor-years-filter">
       <label>Agregar año
