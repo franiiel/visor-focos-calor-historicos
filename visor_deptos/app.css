@@ -22,6 +22,22 @@
 .visor-title { font-size: 1.4rem; margin: 0.25rem 0; }
 .visor-subtitle { margin: 0 0 0.75rem; color: var(--visor-muted); }
 
+/* Pestañas de fuente (MODIS, VIIRS…): la activa tiene aria-pressed="true". */
+.visor-tabs { display: flex; flex-wrap: wrap; border-bottom: 2px solid var(--visor-border); margin-bottom: 0.75rem; }
+.visor-tabs button {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.45rem 1rem;
+  margin-bottom: -2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--visor-muted);
+  cursor: pointer;
+}
+.visor-tabs button:hover { color: var(--visor-ink); }
+.visor-tabs button[aria-pressed="true"] { color: var(--visor-accent); border-bottom-color: var(--visor-accent); }
+
 /* Pantallas angostas: dos columnas que nunca superan el ancho disponible. Un <select> toma el ancho de
    su opción más larga (p. ej. un departamento de nombre largo), así que se lo limita a su columna. */
 .visor-controls {

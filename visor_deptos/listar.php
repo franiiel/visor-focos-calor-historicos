@@ -1,5 +1,8 @@
 <?php
-// Meses disponibles (AAAAMM) del conjunto de datos descrito en config.json. Sin parámetros.
+// Meses disponibles (AAAAMM) de una fuente de config.json (datos/<id>/).
+//
+// Parámetro opcional: fuente (un id de `sources`; sin él, la primera fuente). Solo se acepta un id
+// de la lista, nunca una ruta.
 
 require __DIR__ . '/lib/config.php';
 require __DIR__ . '/lib/series.php';
@@ -13,4 +16,11 @@ try {
     echo json_encode(['error' => 'Configuración inválida: config.json.']);
     exit;
 }
-echo json_encode(array_column(series_list_csv(__DIR__ . '/datos', $config['filePrefix']), 0));
+$fuente = $_GET['fuente'] ?? null;
+$source = ($fuente === null || is_string($fuente)) ? visor_source($config, $fuente) : null;
+if ($source === null) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Parámetro fuente inválido.']);
+    exit;
+}
+echo json_encode(array_column(series_list_csv(__DIR__ . '/datos/' . $source['id'], $source['filePrefix']), 0));

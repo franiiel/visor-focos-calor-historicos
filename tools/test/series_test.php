@@ -23,13 +23,14 @@ function check($name, $ok)
 function make_dir()
 {
     $dir = sys_get_temp_dir() . '/series_test_' . bin2hex(random_bytes(6));
-    mkdir($dir . '/datos', 0755, true);
+    mkdir($dir . '/datos/modis', 0755, true);
+    mkdir($dir . '/datos/viirs');
     return $dir;
 }
 
 function remove_dir($dir)
 {
-    foreach (array_merge(glob($dir . '/*/*') ?: [], glob($dir . '/*') ?: []) as $path) {
+    foreach (array_merge(glob($dir . '/*/*/*') ?: [], glob($dir . '/*/*') ?: [], glob($dir . '/*') ?: []) as $path) {
         is_dir($path) ? @rmdir($path) : @unlink($path);
     }
     @rmdir($dir);
@@ -180,8 +181,18 @@ remove_dir($root);
 $real = visor_config(__DIR__ . '/../../visor_deptos/config.json');
 check('config.json: loads and matches the SEPA contract',
     $real['filePrefix'] === 'focos' && $real['columns'] === ['value' => 'focos', 'anomaly' => 'anomalia']);
-check('config.json: five anomaly class labels and the 2001-2025 reference',
-    count($real['anomalyClasses'] ?? []) === 5 && $real['climatology'] === ['from' => '200101', 'to' => '202512']);
+check('config.json: five anomaly class labels', count($real['anomalyClasses'] ?? []) === 5);
+check('config.json: MODIS 2001-2025 and VIIRS S-NPP 2012-2025 sources, MODIS first',
+    array_column($real['sources'], 'climatology', 'id') === [
+        'modis' => ['from' => '200101', 'to' => '202512'],
+        'viirs' => ['from' => '201201', 'to' => '202512'],
+    ]);
+$modis = visor_source($real);
+check('visor_source: no id is the first source, flattened with the common fields',
+    $modis['id'] === 'modis' && $modis['filePrefix'] === 'focos' && !isset($modis['sources'])
+    && $modis['climatology'] === ['from' => '200101', 'to' => '202512']);
+check('visor_source: by id', visor_source($real, 'viirs')['firmsSource'] === 'VIIRS_SNPP_NRT');
+check('visor_source: unknown id is null', visor_source($real, '../modis') === null);
 
 $root = make_dir();
 $file = $root . '/config.json';
@@ -209,10 +220,17 @@ $invalid = [
     'duplicate columns' => ['columns' => ['value' => 'a', 'anomaly' => 'a']],
     'non-string title' => ['title' => 5],
     'non-boolean integerValues' => ['integerValues' => 'yes'],
-    'bad climatology month' => ['climatology' => ['from' => '2001', 'to' => '202012']],
-    'climatology from after to' => ['climatology' => ['from' => '202012', 'to' => '200101']],
-    'climatology month 13' => ['climatology' => ['from' => '200113', 'to' => '202012']],
-    'climatology month 00' => ['climatology' => ['from' => '200101', 'to' => '202000']],
+    'bad climatology month' => ['sources' => [['climatology' => ['from' => '2001', 'to' => '202012']] + $real['sources'][0]]],
+    'climatology from after to' => ['sources' => [['climatology' => ['from' => '202012', 'to' => '200101']] + $real['sources'][0]]],
+    'climatology month 13' => ['sources' => [['climatology' => ['from' => '200113', 'to' => '202012']] + $real['sources'][0]]],
+    'climatology month 00' => ['sources' => [['climatology' => ['from' => '200101', 'to' => '202000']] + $real['sources'][0]]],
+    'missing sources' => ['sources' => null],
+    'empty sources' => ['sources' => []],
+    'path in source id' => ['sources' => [['id' => '../x'] + $real['sources'][0]]],
+    'duplicate source ids' => ['sources' => [$real['sources'][0], $real['sources'][0]]],
+    'non-string source label' => ['sources' => [['label' => 5] + $real['sources'][0]]],
+    'non-string source note' => ['sources' => [['note' => null] + $real['sources'][0]]],
+    'bad firmsSource' => ['sources' => [['firmsSource' => 'modis/nrt'] + $real['sources'][0]]],
     'missing anomalyClasses' => ['anomalyClasses' => null],
     'four anomalyClasses' => ['anomalyClasses' => ['a', 'b', 'c', 'd']],
     'non-string anomaly class' => ['anomalyClasses' => ['a', 'b', 'c', 'd', 5]],
@@ -264,13 +282,26 @@ $copied = ['index.php', 'listar.php', 'serie.php', 'config.json', 'lib/config.ph
 foreach ($copied as $file) {
     copy("$viewer/$file", "$root/$file");
 }
-write_csv($root . '/datos', '200102', "in1,focos,anomalia\n06007,5,0\n");
-write_csv($root . '/datos', '200101', $csvA);
-write_csv($root . '/datos', '200103', $csvA, 'viirs');
+write_csv($root . '/datos/modis', '200102', "in1,focos,anomalia\n06007,5,0\n");
+write_csv($root . '/datos/modis', '200101', $csvA);
+write_csv($root . '/datos/modis', '200103', $csvA, 'viirs');
+write_csv($root . '/datos/viirs', '201205', $csvB);
+write_csv($root . '/datos', '200104', $csvA); // CSV suelto en datos/: ya no pertenece a ninguna fuente
 
 list($status, $out) = run_endpoint($root, 'listar.php');
 check('listar.php: 200', $status === 200);
-check('listar.php: sorted AAAAMM strings of the configured prefix', json_decode($out, true) === ['200101', '200102']);
+check('listar.php: first source, sorted AAAAMM strings of the configured prefix', json_decode($out, true) === ['200101', '200102']);
+list($status, $out) = run_endpoint($root, 'listar.php', 'fuente=viirs');
+check('listar.php?fuente=viirs: months of datos/viirs/', $status === 200 && json_decode($out, true) === ['201205']);
+foreach (['fuente=..', 'fuente=../datos', 'fuente=MODIS', 'fuente[]=modis'] as $query) {
+    check("listar.php?$query: 400", run_endpoint($root, 'listar.php', $query)[0] === 400);
+    check("serie.php?$query: 400", run_endpoint($root, 'serie.php', $query)[0] === 400);
+}
+
+list($status, $out) = run_endpoint($root, 'serie.php', 'fuente=viirs&in1=06007');
+$one = json_decode($out, true);
+check('serie.php?fuente=viirs&in1: series of datos/viirs/', $status === 200 && $one['months'] === ['201205'] && $one['value'] === [20]);
+check('serie.php: one cache file per source', is_file("$root/cache/serie_viirs.json") && !is_file("$root/cache/serie_modis.json"));
 
 list($status, $out) = run_endpoint($root, 'serie.php', 'in1=06007');
 $one = json_decode($out, true);

@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 // Actualización mensual manual (lo que se empaqueta como procesar_focos.exe, ver tools/build_exe.mjs).
-// Toma la descarga de NASA FIRMS MODIS de un mes que está en la carpeta nasa/, cuenta los focos por
-// departamento, clasifica el mes y escribe datos/<filePrefix>_AAAAMM.csv. Debe producir exactamente lo
-// mismo que monthly_build de visor_deptos/lib/actualizar_mes.php: mantener ambos sincronizados.
+// Toma la descarga de NASA FIRMS de un mes que está en la carpeta nasa/, cuenta los focos por
+// departamento, clasifica el mes y escribe datos/<fuente>/<filePrefix>_AAAAMM.csv. Debe producir
+// exactamente lo mismo que monthly_build de visor_deptos/lib/actualizar_mes.php: mantener ambos sincronizados.
 //
 // Uso:
-//   procesar_focos.exe                         (usa nasa/ y datos/ junto al ejecutable)
-//   node tools/procesar_mes.mjs --nasa <carpeta> [--datos visor_deptos/datos]
+//   procesar_focos.exe [--fuente viirs]        (usa nasa/ y datos/<fuente>/ junto al ejecutable)
+//   node tools/procesar_mes.mjs --nasa <carpeta> [--fuente modis] [--datos visor_deptos/datos/<fuente>]
 //        [--geojson tools/raw/DEPTOS-PROV.geojson] [--config visor_deptos/config.json]
+//
+// --fuente es un id de `sources` en config.json (por defecto, la primera); define la climatología y la
+// carpeta de datos. La descarga de nasa/ tiene que ser de ese sensor.
 //
 // Todo .csv de nasa/, también dentro de subcarpetas (la carpeta DL_FIRE_* de FIRMS se puede dejar tal
 // como viene), es una descarga de FIRMS; los fire_nrt_* cuentan solo después del último día de los
@@ -21,7 +24,7 @@ import sea from 'node:sea';
 import { fileURLToPath } from 'node:url';
 
 import { findDepartment, prepareDepartments, readFirms } from './compute_anomalies.mjs';
-import { anomalyClass } from './convert_excel.mjs';
+import { anomalyClass, sourceConfig } from './convert_excel.mjs';
 
 // [in1, valor] de un CSV mensual, con la misma lectura que series_parse_csv de lib/series.php.
 function readMonthValues(text, name, config) {
@@ -126,52 +129,63 @@ export function processMonth({ nasaDir, datosDir, geojson, config }) {
 
 // ---------- CLI ----------
 
-function parseArgs(argv) {
+// En el .exe solo se acepta --fuente: el resto va embebido o está junto al ejecutable.
+function parseArgs(argv, isExe) {
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  const opts = {
-    nasa: null,
-    datos: join(repoRoot, 'visor_deptos', 'datos'),
-    geojson: join(repoRoot, 'tools', 'raw', 'DEPTOS-PROV.geojson'),
-    config: join(repoRoot, 'visor_deptos', 'config.json'),
-  };
+  const opts = isExe
+    ? { fuente: null }
+    : {
+      nasa: null,
+      fuente: null,
+      datos: null,
+      geojson: join(repoRoot, 'tools', 'raw', 'DEPTOS-PROV.geojson'),
+      config: join(repoRoot, 'visor_deptos', 'config.json'),
+    };
   for (let i = 0; i < argv.length; i += 2) {
     const key = argv[i].replace(/^--/, '');
     if (!(key in opts) || argv[i + 1] === undefined) throw new Error(`Unknown or incomplete option: ${argv[i]}`);
     opts[key] = argv[i + 1];
   }
-  if (!opts.nasa) throw new Error('Missing --nasa <folder with the FIRMS download>');
-  return opts;
+  if (!isExe && !opts.nasa) throw new Error('Missing --nasa <folder with the FIRMS download>');
+  return { ...opts, repoRoot };
 }
 
-// Se quita un BOM UTF-8, como hace lib/config.php.
-const parseJson = (text) => JSON.parse(text.replace(/^﻿/, ''));
-
 function main() {
+  const opts = parseArgs(process.argv.slice(2), sea.isSea());
   if (sea.isSea()) {
-    // La geometría y config.json van embebidos en el .exe; nasa/ y datos/ están junto al ejecutable.
+    // La geometría y config.json van embebidos en el .exe; nasa/ y datos/<fuente>/ están junto al ejecutable.
     const here = dirname(process.execPath);
-    return processMonth({
-      nasaDir: join(here, 'nasa'),
-      datosDir: join(here, 'datos'),
-      geojson: parseJson(sea.getAsset('geojson', 'utf8')),
-      config: parseJson(sea.getAsset('config', 'utf8')),
-    });
+    const config = sourceConfig(sea.getAsset('config', 'utf8'), opts.fuente);
+    const datosDir = join(here, 'datos', config.id);
+    return {
+      datosDir,
+      ...processMonth({
+        nasaDir: join(here, 'nasa'),
+        datosDir,
+        geojson: JSON.parse(sea.getAsset('geojson', 'utf8').replace(/^﻿/, '')),
+        config,
+      }),
+    };
   }
-  const opts = parseArgs(process.argv.slice(2));
-  return processMonth({
-    nasaDir: resolve(opts.nasa),
-    datosDir: resolve(opts.datos),
-    geojson: parseJson(readFileSync(resolve(opts.geojson), 'utf8')),
-    config: parseJson(readFileSync(resolve(opts.config), 'utf8')),
-  });
+  const config = sourceConfig(readFileSync(resolve(opts.config), 'utf8'), opts.fuente);
+  const datosDir = resolve(opts.datos ?? join(opts.repoRoot, 'visor_deptos', 'datos', config.id));
+  return {
+    datosDir,
+    ...processMonth({
+      nasaDir: resolve(opts.nasa),
+      datosDir,
+      geojson: JSON.parse(readFileSync(resolve(opts.geojson), 'utf8').replace(/^﻿/, '')),
+      config,
+    }),
+  };
 }
 
 // En el .exe, process.argv[1] es el ejecutable: por eso se usa sea.isSea().
 if (sea.isSea() || (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))) {
   let code = 0;
   try {
-    const { month, name, assigned, outside } = main();
-    console.log(`${month}: ${assigned} focos asignados, ${outside} fuera de todo departamento -> datos/${name}`);
+    const { month, name, assigned, outside, datosDir } = main();
+    console.log(`${month}: ${assigned} focos asignados, ${outside} fuera de todo departamento -> ${join(datosDir, name)}`);
     console.log('La descarga de NASA se movió a nasa/procesados/.');
   } catch (err) {
     console.error(`Error: ${err.message}`);

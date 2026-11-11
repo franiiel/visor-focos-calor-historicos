@@ -1,6 +1,6 @@
-// Visor departamental (módulo ES) del conjunto de datos descrito en config.json, que
-// index.php incrusta como #visor-config. index.php carga Leaflet (L) y Chart.js (Chart)
-// como scripts UMD con versión fija.
+// Visor departamental (módulo ES) de los datos descritos en config.json, que index.php incrusta
+// como #visor-config. Cada fuente de `sources` (MODIS, VIIRS…) es un botón de #sources; sus CSV
+// están en datos/<id>/. index.php carga Leaflet (L) y Chart.js (Chart) como scripts UMD con versión fija.
 import { buildScale, colorFor, legendItems, formatNumber, anomalyLabel } from './scales.js';
 import {
   parseMonthCsv, splitMonth, monthLabel, MONTH_NAMES, createLatestGuard, lustrumStart, lustrumMeans, sumSeries,
@@ -28,22 +28,24 @@ const VALUE_DECIMALS = config && config.integerValues ? 0 : 1;
 const UNIT = config ? config.unit : '';
 const UNIT_TITLE = UNIT.charAt(0).toUpperCase() + UNIT.slice(1);
 const CLASS_LABELS = config ? config.anomalyClasses : [];
-const CLIM_PERIOD = config
-  ? `${config.climatology.from.slice(0, 4)}–${config.climatology.to.slice(0, 4)}`
-  : '';
+
+// Fuente activa: los campos de un elemento de config.sources (id, label, climatology, note).
+let source = null;
+
+const climPeriod = () => `${source.climatology.from.slice(0, 4)}–${source.climatology.to.slice(0, 4)}`;
 
 const state = {
   months: [],
   month: null,
   layer: 'anomaly',
-  monthCache: new Map(), // AAAAMM -> Map<in1, {value, anomaly}>
+  monthCache: new Map(), // '<fuente>/AAAAMM' -> Map<in1, {value, anomaly}>
   rows: new Map(),
   scale: null,
   selected: null, // { in1, depto, provincia }
   province: null, // código de 2 dígitos del filtro de provincia, null para todo el país
   provinces: new Map(), // código -> { name, deptos: [propiedades del feature] }
   series: null, // { months, value, anomaly? }; anomaly solo para un único departamento
-  allSeries: null, // promesa de la respuesta completa de serie.php, usada para los totales
+  allSeries: new Map(), // fuente -> promesa de la respuesta completa de serie.php, usada para los totales
   map: null,
   geoLayer: null,
   layersByIn1: new Map(),
@@ -66,6 +68,7 @@ function yearColor(slot) {
 // Solo la última carga de mes y el último clic en un departamento pueden modificar la interfaz.
 const monthGuard = createLatestGuard();
 const seriesGuard = createLatestGuard();
+const sourceGuard = createLatestGuard();
 
 function layerTitle() {
   return state.layer === 'anomaly' ? config.anomalyTitle : config.valueTitle;
@@ -164,7 +167,7 @@ function renderLegend() {
   legend.replaceChildren();
   const title = document.createElement('div');
   title.className = 'visor-legend-title';
-  title.textContent = state.layer === 'anomaly' ? `Anomalía (${CLIM_PERIOD})` : `${UNIT_TITLE} en el mes`;
+  title.textContent = state.layer === 'anomaly' ? `Anomalía (${climPeriod()})` : `${UNIT_TITLE} en el mes`;
   legend.append(title);
   for (const item of legendItems(state.scale)) {
     const row = document.createElement('div');
@@ -192,10 +195,12 @@ function restyle() {
 async function loadMonth(month) {
   if (!state.months.includes(month)) return;
   const token = monthGuard.next();
-  let rows = state.monthCache.get(month);
+  // La clave lleva la fuente: una respuesta tardía de otra fuente no puede ocupar el lugar de esta.
+  const key = `${source.id}/${month}`;
+  let rows = state.monthCache.get(key);
   if (!rows) {
     try {
-      const res = await fetch(`datos/${config.filePrefix}_${month}.csv`);
+      const res = await fetch(`datos/${source.id}/${config.filePrefix}_${month}.csv`);
       if (!res.ok) throw new Error(`No se pudo leer el archivo del mes ${month} (HTTP ${res.status})`);
       rows = parseMonthCsv(await res.text(), config.columns);
     } catch (err) {
@@ -203,7 +208,7 @@ async function loadMonth(month) {
       if (!monthGuard.isCurrent(token)) return;
       throw err;
     }
-    state.monthCache.set(month, rows);
+    state.monthCache.set(key, rows);
   }
   // Se ignora una respuesta tardía si mientras tanto se seleccionó otro mes.
   if (!monthGuard.isCurrent(token)) return;
@@ -224,17 +229,23 @@ function fillMonthSelect(year, preferredMonth) {
   return sel.value;
 }
 
-function setupControls() {
+// Llena año y mes con los meses de la fuente; devuelve `month` si existe en ella, si no el último.
+function fillControls(month) {
   const years = [...new Set(state.months.map((m) => splitMonth(m).year))].sort((a, b) => b - a);
   const selYear = $('sel-year');
   const selMonth = $('sel-month');
   selYear.replaceChildren(...years.map((y) => new Option(String(y), String(y))));
-  const latest = state.months[state.months.length - 1];
-  selYear.value = String(splitMonth(latest).year);
-  fillMonthSelect(splitMonth(latest).year, splitMonth(latest).month);
+  const chosen = state.months.includes(month) ? month : state.months[state.months.length - 1];
+  selYear.value = String(splitMonth(chosen).year);
+  fillMonthSelect(splitMonth(chosen).year, splitMonth(chosen).month);
   selYear.disabled = false;
   selMonth.disabled = false;
+  return chosen;
+}
 
+function setupControls() {
+  const selYear = $('sel-year');
+  const selMonth = $('sel-month');
   const onChange = (fn) => () => fn().catch((err) => showError(err.message));
   selYear.addEventListener('change', onChange(() => {
     const current = state.month ? splitMonth(state.month).month : 12;
@@ -244,10 +255,9 @@ function setupControls() {
   for (const radio of document.querySelectorAll('input[name="layer"]')) {
     radio.addEventListener('change', () => {
       state.layer = radio.value;
-      restyle();
+      if (state.month) restyle();
     });
   }
-  return latest;
 }
 
 // ---------- Filtros de área y series ----------
@@ -312,13 +322,28 @@ function seriesFailed(err) {
 
 // ponytail: los totales cargan serie.php completo (~750 KB) una sola vez; agregar un endpoint por provincia si resulta demasiado pesado.
 function loadAllSeries() {
-  if (!state.allSeries) {
-    state.allSeries = fetchJson('serie.php', 'serie.php').catch((err) => {
-      state.allSeries = null; // permite que la próxima selección reintente
+  const { id } = source;
+  if (!state.allSeries.has(id)) {
+    state.allSeries.set(id, fetchJson(`serie.php?fuente=${encodeURIComponent(id)}`, 'serie.php').catch((err) => {
+      state.allSeries.delete(id); // permite que la próxima selección reintente
       throw err;
-    });
+    }));
   }
-  return state.allSeries;
+  return state.allSeries.get(id);
+}
+
+const noDataMessage = () => `Todavía no hay datos de ${source.label}.`;
+
+// Fuente sin meses: no hay serie que pedir; el panel lo dice en lugar de mostrar un error.
+function seriesWithoutData() {
+  if (state.months.length) return false;
+  seriesGuard.next(); // descarta una respuesta tardía de la fuente anterior
+  state.series = null;
+  if (state.chart) state.chart.destroy();
+  state.chart = null;
+  $('panel-info').textContent = noDataMessage();
+  renderYearsChart();
+  return true;
 }
 
 // Total de todo el país (código '') o de una provincia (código de 2 dígitos).
@@ -327,6 +352,7 @@ async function showArea(code) {
   state.province = code || null;
   state.geoLayer.setStyle(featureStyle);
   $('panel-title').textContent = code ? state.provinces.get(code).name : 'Argentina';
+  if (seriesWithoutData()) return;
   $('panel-info').textContent = 'Cargando serie…';
   const token = seriesGuard.next();
   state.series = null;
@@ -351,6 +377,7 @@ async function selectDepartment(props) {
   fillDeptoSelect(state.province, props.in1);
   state.geoLayer.setStyle(featureStyle);
   $('panel-title').textContent = `${props.depto} (${props.provincia})`;
+  if (seriesWithoutData()) return;
   $('panel-info').textContent = 'Cargando serie…';
   const token = seriesGuard.next();
   // Se descarta la serie anterior para que un cambio de mes durante la carga no pueda
@@ -359,7 +386,9 @@ async function selectDepartment(props) {
   renderYearsChart();
   let series;
   try {
-    series = await fetchJson(`serie.php?in1=${encodeURIComponent(props.in1)}`, 'serie.php');
+    series = await fetchJson(
+      `serie.php?fuente=${encodeURIComponent(source.id)}&in1=${encodeURIComponent(props.in1)}`, 'serie.php',
+    );
   } catch (err) {
     // Se ignora un fallo tardío si mientras tanto se eligió otra área.
     if (seriesGuard.isCurrent(token)) seriesFailed(err);
@@ -409,8 +438,9 @@ function downloadPng(chart, name) {
   out.toBlob((blob) => downloadFile(name, blob), 'image/png');
 }
 
-function areaCode() {
-  return state.selected ? state.selected.in1 : state.province || 'argentina';
+// Prefijo de los archivos descargados, p. ej. focos_viirs_serie_06007.
+function downloadName(kind) {
+  return `focos_${source.id}_${kind}_${state.selected ? state.selected.in1 : state.province || 'argentina'}`;
 }
 
 // Mientras carga otra área el gráfico anterior sigue en pantalla con state.series en null: no se descarga.
@@ -422,17 +452,17 @@ function setupDownloads() {
     // Se excluye el marcador del mes seleccionado (dataset 2); la anomalía existe solo por departamento.
     const datasets = state.chart.data.datasets.slice(0, 2);
     if (s.anomaly) datasets.push({ label: 'Anomalía', data: s.anomaly });
-    downloadFile(`focos_serie_${areaCode()}.csv`, csv(s.months, datasets));
+    downloadFile(`${downloadName('serie')}.csv`, csv(s.months, datasets));
   });
   $('chart-png').addEventListener('click', () => {
-    if (state.series && state.chart) downloadPng(state.chart, `focos_serie_${areaCode()}.png`);
+    if (state.series && state.chart) downloadPng(state.chart, `${downloadName('serie')}.png`);
   });
   $('years-csv').addEventListener('click', () => {
     const c = state.yearsChart;
-    if (state.series && c) downloadFile(`focos_comparacion_${areaCode()}.csv`, csv(c.data.labels, c.data.datasets));
+    if (state.series && c) downloadFile(`${downloadName('comparacion')}.csv`, csv(c.data.labels, c.data.datasets));
   });
   $('years-png').addEventListener('click', () => {
-    if (state.series && state.yearsChart) downloadPng(state.yearsChart, `focos_comparacion_${areaCode()}.png`);
+    if (state.series && state.yearsChart) downloadPng(state.yearsChart, `${downloadName('comparacion')}.png`);
   });
   // <details> no se cierra solo: se cierra al elegir una opción, al hacer clic afuera o con Escape.
   const menus = [...document.querySelectorAll('.visor-download')];
@@ -553,13 +583,19 @@ function renderChart() {
 // ---------- Comparación de años ----------
 
 function setupYears() {
-  state.years = [...new Set(state.months.map((m) => splitMonth(m).year))].sort((a, b) => a - b);
   const sel = $('years-add');
   sel.addEventListener('change', () => {
     if (sel.value) toggleYear(Number(sel.value), true);
   });
-  // Se empieza con el año más reciente para que el gráfico sea visible desde el principio.
-  toggleYear(state.years[state.years.length - 1], true);
+}
+
+// Años de la fuente activa: se conservan los elegidos que existen en ella; si no queda ninguno,
+// se elige el más reciente para que el gráfico sea visible desde el principio.
+function resetYears() {
+  state.years = [...new Set(state.months.map((m) => splitMonth(m).year))].sort((a, b) => a - b);
+  for (const year of state.yearSlots.keys()) if (!state.years.includes(year)) state.yearSlots.delete(year);
+  if (!state.yearSlots.size && state.years.length) toggleYear(state.years[state.years.length - 1], true);
+  else renderYearControls();
 }
 
 // El desplegable ofrece los años aún no elegidos; los elegidos son chips con un botón para quitarlos.
@@ -616,12 +652,15 @@ function renderYearsChart() {
   if (!years.length || !s) {
     wrap.hidden = true;
     // Sin una serie, se muestra el estado propio del panel (cargando o el error).
-    $('years-hint').textContent = years.length ? $('panel-info').textContent : 'Elija uno o más años para ver el gráfico.';
+    $('years-hint').textContent = years.length || !state.months.length
+      ? $('panel-info').textContent
+      : 'Elija uno o más años para ver el gráfico.';
     return;
   }
   wrap.hidden = false;
-  $('years-hint').textContent = `Promedio, máximo y mínimo de cada mes en el período ${CLIM_PERIOD}.`;
-  const stats = monthlyStats(s.months, s.value, config.climatology.from, config.climatology.to);
+  const period = climPeriod();
+  $('years-hint').textContent = `Promedio, máximo y mínimo de cada mes en el período ${period}.`;
+  const stats = monthlyStats(s.months, s.value, source.climatology.from, source.climatology.to);
   const reference = (label, data, style) => ({ label, data, pointRadius: 0, order: 1, ...style });
   state.yearsChart = new Chart($('years-chart'), {
     type: 'line',
@@ -640,9 +679,9 @@ function renderYearsChart() {
             pointHoverRadius: 6,
           };
         }),
-        reference(`Máximo ${CLIM_PERIOD}`, stats.max, { borderColor: '#52514e', borderWidth: 1.5, borderDash: [6, 4] }),
-        reference(`Promedio ${CLIM_PERIOD}`, stats.mean, { borderColor: '#000', backgroundColor: '#000', borderWidth: 2 }),
-        reference(`Mínimo ${CLIM_PERIOD}`, stats.min, { borderColor: '#52514e', borderWidth: 1.5, borderDash: [2, 3] }),
+        reference(`Máximo ${period}`, stats.max, { borderColor: '#52514e', borderWidth: 1.5, borderDash: [6, 4] }),
+        reference(`Promedio ${period}`, stats.mean, { borderColor: '#000', backgroundColor: '#000', borderWidth: 2 }),
+        reference(`Mínimo ${period}`, stats.min, { borderColor: '#52514e', borderWidth: 1.5, borderDash: [2, 3] }),
       ],
     },
     options: {
@@ -688,37 +727,82 @@ async function init() {
     showError('No se pudo leer la configuración del visor (config.json).');
     return;
   }
-  let months;
+  // Una fuente compartida como enlace (#viirs) se abre directamente.
+  const first = config.sources.find((s) => `#${s.id}` === location.hash) || config.sources[0];
+  // Los meses de la primera fuente se piden junto con la geometría.
+  const listing = listMonths(first.id);
   let geo;
   try {
-    [months, geo] = await Promise.all([
-      fetchJson('listar.php', 'listar.php'),
-      fetchJson('deptos.geo.json', 'deptos.geo.json'),
-    ]);
+    geo = await fetchJson('deptos.geo.json', 'deptos.geo.json');
   } catch (err) {
-    showError(`No se pudieron cargar los datos iniciales (${err.message}). El visor necesita PHP para listar los meses.`);
+    showError(`No se pudieron cargar los datos iniciales (${err.message}).`);
     $('map-title').textContent = '';
     return;
   }
-  state.months = Array.isArray(months) ? months.filter((m) => /^\d{6}$/.test(m)).sort() : [];
   state.map = createMap(geo);
   setupChartExpand('chart-expand', 'panel');
   setupChartExpand('years-expand', 'years');
   setupDownloads();
-  if (!state.months.length) {
-    showError('No hay meses con datos en la carpeta datos/.');
-    $('map-title').textContent = '';
-    return;
-  }
-  const latest = setupControls();
+  setupControls();
   setupAreaFilters(geo);
   setupYears();
-  try {
-    await loadMonth(latest);
-  } catch (err) {
-    showError(err.message);
+  for (const btn of document.querySelectorAll('#sources button')) {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.source === source.id) return;
+      history.replaceState(null, '', `#${btn.dataset.source}`);
+      loadSource(btn.dataset.source);
+    });
   }
-  showArea('');
+  await loadSource(first.id, listing);
+}
+
+function listMonths(id) {
+  return fetchJson(`listar.php?fuente=${encodeURIComponent(id)}`, 'listar.php');
+}
+
+// Muestra una fuente: sus meses, el mismo mes y la misma área que antes si existen en ella, y su serie.
+async function loadSource(id, listing = listMonths(id)) {
+  source = config.sources.find((s) => s.id === id);
+  for (const btn of document.querySelectorAll('#sources button')) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.source === id));
+  }
+  $('note').textContent = source.note;
+  $('error').hidden = true;
+  const token = sourceGuard.next();
+  let months;
+  try {
+    months = await listing;
+  } catch (err) {
+    if (!sourceGuard.isCurrent(token)) return;
+    showError(`No se pudieron listar los meses de ${source.label} (${err.message}). El visor necesita PHP para listar los meses.`);
+    return;
+  }
+  if (!sourceGuard.isCurrent(token)) return;
+  state.months = Array.isArray(months) ? months.filter((m) => /^\d{6}$/.test(m)).sort() : [];
+  resetYears();
+  if (state.months.length) {
+    try {
+      await loadMonth(fillControls(state.month));
+    } catch (err) {
+      showError(err.message);
+    }
+  } else {
+    // Fuente sin CSV todavía (p. ej. recién agregada a config.json): mapa gris y aviso, sin error.
+    monthGuard.next();
+    state.month = null;
+    state.rows = new Map();
+    state.scale = null;
+    state.geoLayer.setStyle(featureStyle);
+    $('legend').replaceChildren();
+    $('map-title').textContent = noDataMessage();
+    $('sel-year').replaceChildren();
+    $('sel-month').replaceChildren();
+    $('sel-year').disabled = true;
+    $('sel-month').disabled = true;
+  }
+  if (!sourceGuard.isCurrent(token)) return;
+  if (state.selected) selectDepartment(state.selected);
+  else showArea(state.province || '');
 }
 
 init();

@@ -79,6 +79,13 @@ header('Content-Type: text/html; charset=utf-8');
             <div class="clearfix"></div>
 
 <main class="visor" id="visor">
+  <div class="visor-tabs" id="sources" role="group" aria-label="Sensor">
+<?php foreach ($config['sources'] as $i => $source): ?>
+    <button type="button" data-source="<?php echo h($source['id']); ?>"
+            aria-pressed="<?php echo $i === 0 ? 'true' : 'false'; ?>"><?php echo h($source['label']); ?></button>
+<?php endforeach; ?>
+  </div>
+
   <p class="visor-subtitle" id="map-title" aria-live="polite">Cargando datos…</p>
 
   <form class="visor-controls" id="controls" onsubmit="return false;">
@@ -169,7 +176,7 @@ header('Content-Type: text/html; charset=utf-8');
   </section>
   </div>
 
-  <p class="visor-note"><?php echo h($config['note']); ?></p>
+  <p class="visor-note" id="note"><?php echo h($config['sources'][0]['note']); ?></p>
 </main>
 
 <script type="application/json" id="visor-config"><?php
