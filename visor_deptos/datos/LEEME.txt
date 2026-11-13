@@ -1,14 +1,24 @@
 DATOS MENSUALES DEL VISOR
 
-Un archivo por mes: focos_AAAAMM.csv, con una fila por departamento.
+Una carpeta por fuente (sensor), con el id de "sources" en config.json:
+- modis/  focos MODIS (climatologia 2001-2025).
+- viirs/  focos VIIRS S-NPP (climatologia 2012-2025).
+Cada fuente es una pestana del visor. Una fuente sin archivos se muestra
+con el aviso "Todavia no hay datos".
+
+En cada carpeta, un archivo por mes: focos_AAAAMM.csv, con una fila por
+departamento.
 Formato: in1,focos,anomalia
 - in1: codigo INDEC del departamento (5 digitos, con el cero inicial).
 - focos: focos de calor del mes.
 - anomalia: clase de SEPA, de 1 a 5, respecto del mismo mes en el
-  periodo de referencia (ver VISOR_FOCOS.md).
+  periodo de referencia de esa fuente (ver VISOR_FOCOS.md).
 
 Origen de los archivos:
-- Datos de SEPA: tools/convert_excel.mjs a partir de la planilla
+- Datos de NASA FIRMS: tools/compute_anomalies.mjs --fuente <id> (historico)
+  y lib/actualizar_mes.php --fuente <id> o procesar_focos.exe (descarga en nasa/<id>/)
+  (cada mes).
+- Datos de SEPA (solo MODIS): tools/convert_excel.mjs a partir de la planilla
   ESTADISTICAS-DEPARTAMENTALES, o el CSV del mes que deja SEPA.
 - Datos de prueba: tools/generate_synthetic.mjs (inventados, NO son focos
   reales; solo para pruebas locales, el visor no los distingue).

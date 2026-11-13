@@ -2,7 +2,20 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { deflateRawSync } from 'node:zlib';
 
-import { anomalyClass, buildMonthlyRows, convertWorkbook, readXlsxSheets } from '../convert_excel.mjs';
+import { readFileSync } from 'node:fs';
+
+import { anomalyClass, buildMonthlyRows, convertWorkbook, readXlsxSheets, sourceConfig } from '../convert_excel.mjs';
+
+test('sourceConfig flattens one source of config.json like visor_source', () => {
+  const text = '﻿' + readFileSync(new URL('../../visor_deptos/config.json', import.meta.url), 'utf8');
+  const modis = sourceConfig(text);
+  assert.equal(modis.id, 'modis');
+  assert.equal(modis.filePrefix, 'focos');
+  assert.deepEqual(modis.climatology, { from: '200101', to: '202512' });
+  assert.equal(modis.sources, undefined);
+  assert.deepEqual(sourceConfig(text, 'viirs').climatology, { from: '201201', to: '202512' });
+  assert.throws(() => sourceConfig(text, 'noaa20'), /Unknown --fuente noaa20/);
+});
 
 const CONFIG = {
   filePrefix: 'focos',

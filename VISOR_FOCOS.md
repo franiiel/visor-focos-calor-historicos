@@ -74,17 +74,20 @@ Si cada mes hubiera que correr un script aparte, armar un archivo y subirlo, el 
 ├── index.php            plantilla con el header y el footer del sitio
 ├── app.js               lógica del visor (módulo ES)
 ├── app.css
-├── config.json          qué conjunto de datos muestra el visor (ver "Configuración")
+├── config.json          qué datos muestra el visor y de qué fuentes (ver "Configuración")
 ├── deptos.geo.json      geometría de departamentos (estática)
 ├── listar.php           devuelve la lista de meses disponibles
 ├── serie.php            devuelve la serie consolidada (con caché)
 ├── lib/                 funciones PHP compartidas y actualizar_mes.php del cron (no se acceden desde la web)
 ├── cache/
-│   └── serie.json       generado por serie.php, no se edita a mano
+│   └── serie_<fuente>.json  generado por serie.php, no se edita a mano
 └── datos/
-    ├── focos_200101.csv
-    ├── …
-    └── focos_202608.csv    ← uno nuevo por mes, lo deja el proceso de SEPA
+    ├── modis/           una carpeta por fuente (sensor), con el id de config.json
+    │   ├── focos_200101.csv
+    │   ├── …
+    │   └── focos_202608.csv    ← uno nuevo por mes, lo deja el proceso de SEPA
+    └── viirs/
+        └── focos_AAAAMM.csv    desde 2012 (VIIRS S-NPP)
 ```
 
 Sigue el mismo esquema que el visor de focos de los últimos 5 días (`/productos/focos/seccion-focos/`) y los visores de `/productos/geosepa/`: plantilla PHP, módulos JS y su CSS. Así el equipo de SEPA lo puede mantener sin aprender nada nuevo.
@@ -127,9 +130,15 @@ Salen los mismos CSV mensuales de «Formato de datos propuesto», así que el vi
 - Las diferencias grandes son errores de carga de la planilla (ver las preguntas 9 y 10).
 - Clases de 2026 contra las hojas `ENERO` … `AGO`: 3951 de 4080 coinciden (96,8 %). De las 129 distintas, 102 vienen de un conteo de 2026 distinto (casi siempre por un foco del límite) y el resto, de las referencias (años sin renglón en la planilla, errores de carga y la hoja `ABRIL`).
 
+**Validación de VIIRS S-NPP** contra la planilla de INTA `analisis-departamentales.xlsx` (hoja `historia`, de 2012 a 2025, y hojas `JUL`, `AGO` y `OCT` de 2026):
+
+- Focos por departamento y mes: 81 937 de 83 580 coinciden exactamente (98 %). Las diferencias grandes son las mismas de MODIS: departamentos con Ñ cuyo código está intercambiado con el de un vecino en la planilla (Campana y Cañuelas, Aluminé y Añelo) y Lácar y Huiliches en febrero de 2025 (ver la pregunta 10).
+- Focos de 2026: coinciden en 497, 493 y 502 de 510 departamentos (julio, agosto y octubre). Casi todas las diferencias son esos códigos intercambiados.
+- Clases de 2026: julio coincide en 502 de 510. En agosto y octubre coinciden mucho menos (365 y 351) por dos motivos de la planilla: la media usa 13 años en los departamentos sin renglón en algún año (ver la pregunta 2), y la hoja `OCT` usa la referencia de agosto (sus MAX, MD y MIN son iguales a los de `AGO`).
+
 ### Configuración del conjunto de datos
 
-El visor no está atado a los focos MODIS. Todo lo que depende del conjunto de datos está en un solo archivo, `config.json`, y el código no cambia:
+El visor no está atado a los focos MODIS. Todo lo que depende de los datos está en un solo archivo, `config.json`, y el código no cambia. Los textos y el formato de los CSV son comunes; cada **fuente** (sensor) de `sources` es una pestaña del visor, con sus CSV en `datos/<id>/` y su propio período de referencia:
 
 ```json
 {
@@ -141,27 +150,38 @@ El visor no está atado a los focos MODIS. Todo lo que depende del conjunto de d
   "valueLabel": "Focos totales",
   "valueTitle": "Focos de calor totales",
   "anomalyTitle": "Anomalía de focos de calor",
-  "climatology": { "from": "200101", "to": "202512" },
   "anomalyClasses": [
     "Igual o por debajo del mínimo histórico",
-    "Por debajo de lo normal",
-    "Normal",
-    "Por encima de lo normal",
+    "Por debajo del promedio (-10 %)",
+    "Promedio",
+    "Por encima del promedio (+10 %)",
     "Por encima del máximo histórico"
   ],
-  "note": "Anomalía: …"
+  "sources": [
+    { "id": "modis", "label": "MODIS", "firmsSource": "MODIS_NRT",
+      "climatology": { "from": "200101", "to": "202512" }, "note": "Anomalía: … 2001–2025 …" },
+    { "id": "viirs", "label": "VIIRS S-NPP", "firmsSource": "VIIRS_SNPP_NRT",
+      "climatology": { "from": "201201", "to": "202512" }, "note": "Anomalía: … 2012–2025 …" }
+  ]
 }
 ```
 
-- `filePrefix` y `columns`: nombre de los CSV (`datos/<filePrefix>_AAAAMM.csv`) y de sus dos columnas numéricas. `in1` es siempre la clave de unión. Con los valores de arriba, el formato es el de "Formato de datos propuesto".
+- `filePrefix` y `columns`: nombre de los CSV (`datos/<id>/<filePrefix>_AAAAMM.csv`) y de sus dos columnas numéricas. `in1` es siempre la clave de unión. Con los valores de arriba, el formato es el de "Formato de datos propuesto".
 - `integerValues`: `true` para conteos (se redondean a enteros); `false` para conservar decimales.
-- `climatology`: período de referencia (AAAAMM, inclusive; el mes va de 01 a 12). Es el mismo con el que SEPA calcula las clases, 2001–2025, y el visor lo muestra en la leyenda de la anomalía.
 - `anomalyClasses`: los textos de las clases 1 a 5, en ese orden. Aparecen en la leyenda y en el tooltip.
-- `title`, `unit`, `valueLabel`, `valueTitle`, `anomalyTitle` y `note`: textos de la página, la leyenda, el tooltip y el gráfico. La leyenda de la anomalía toma el período de `climatology`, pero `note` es texto libre: si menciona el período o la unidad, se actualiza a mano junto con `climatology` y `unit`.
+- `title`, `unit`, `valueLabel`, `valueTitle` y `anomalyTitle`: textos de la página, la leyenda, el tooltip y el gráfico.
+- `sources`: las fuentes, en el orden de las pestañas; la primera es la que se abre por defecto (otra se abre con un enlace como `…/#viirs`). Cada una tiene:
+  - `id`: nombre de su carpeta en `datos/` (`^[a-z0-9_-]+$`, único).
+  - `label`: el texto de la pestaña.
+  - `firmsSource`: la fuente de la API de FIRMS que usa el cron (`MODIS_NRT`, `VIIRS_SNPP_NRT`…).
+  - `climatology`: período de referencia (AAAAMM, inclusive; el mes va de 01 a 12). MODIS usa el mismo con el que SEPA calcula las clases, 2001–2025; VIIRS S-NPP empieza en 2012, así que usa 2012–2025. El visor lo muestra en la leyenda de la anomalía y en la comparación por año.
+  - `note`: texto libre al pie del mapa. Si menciona el período o la unidad, se actualiza a mano junto con `climatology` y `unit`.
 
-Para mostrar otro conjunto con la misma forma (un valor mensual y su clase de anomalía por departamento, por ejemplo focos VIIRS), se reemplazan los CSV de `datos/` y se edita `config.json`. El caché de `serie.php` se regenera solo, porque su huella incluye la configuración. Si `config.json` falta o no es válido (por ejemplo, un prefijo con `/` o `..`), los tres puntos de entrada responden un error 500 que lo nombra: no hay valores por defecto ocultos en el código, así que `config.json` se sube siempre junto con el resto de los archivos. Se acepta guardado con o sin BOM UTF-8.
+Las dos fuentes no se mezclan: cada una tiene sus CSV, su caché y su climatología, porque VIIRS detecta más focos que MODIS (mayor resolución) y comparar un mes VIIRS con una referencia MODIS daría anomalías falsas. Una fuente sin CSV todavía se muestra con el aviso «Todavía no hay datos de …» y el mapa gris.
 
-Cada instalación muestra un solo conjunto. La escala de los valores está pensada para conteos (reserva una clase para el cero); una variable continua puede necesitar otros cortes. La de la anomalía es fija: un color por clase.
+Para agregar una fuente (por ejemplo NOAA-20), se agrega un elemento a `sources` y se dejan sus CSV en `datos/<id>/`. El caché de `serie.php` se regenera solo, porque su huella incluye la configuración. Si `config.json` falta o no es válido (por ejemplo, un prefijo o un `id` con `/` o `..`), los tres puntos de entrada responden un error 500 que lo nombra: no hay valores por defecto ocultos en el código, así que `config.json` se sube siempre junto con el resto de los archivos. Se acepta guardado con o sin BOM UTF-8.
+
+La escala de los valores está pensada para conteos (reserva una clase para el cero); una variable continua puede necesitar otros cortes. La de la anomalía es fija: un color por clase.
 
 ### Geometría
 
@@ -176,15 +196,15 @@ Se parte de la capa que ya usa el visor de 5 días: `seccion-focos/data/geoJSON/
 
 ### Lista de meses: `listar.php`
 
-El visor necesita saber qué meses hay. `listar.php` **no recibe ningún parámetro**: lista la carpeta `datos/` y devuelve los meses encontrados (`["200101", …]`), con el prefijo de `config.json`. Sin parámetros no hay nada que validar, y se evita el riesgo de que alguien pida otra carpeta (el problema posible que se observó en `listar_archivos_MNC.php`). El prefijo viene de un archivo del servidor, no del pedido, y además se valida (`^[a-z0-9_-]+$`) antes de usarlo en la búsqueda de archivos.
+El visor necesita saber qué meses hay. `listar.php?fuente=<id>` lista la carpeta `datos/<id>/` y devuelve los meses encontrados (`["200101", …]`), con el prefijo de `config.json`; sin `fuente`, usa la primera fuente. El único parámetro **no es una ruta**: se compara contra la lista de `id` de `config.json` y cualquier otro valor (`..`, `../datos`, `MODIS`, un arreglo) responde 400. Así se evita el riesgo de que alguien pida otra carpeta (el problema posible que se observó en `listar_archivos_MNC.php`). El prefijo y los `id` vienen de un archivo del servidor, no del pedido, y además se validan (`^[a-z0-9_-]+$`) antes de usarlos en la búsqueda de archivos.
 
 ### Serie histórica: `serie.php`
 
 El gráfico de un departamento necesita todos sus meses. Si el navegador tuviera que leer un CSV por mes, para dibujar **un solo gráfico** bajaría unos 300 archivos (2001–2026). Por eso:
 
-- Los CSV mensuales en `datos/` siguen siendo el **contrato con el proceso de SEPA**: no cambia nada para quien los genera.
-- `serie.php` arma un único `cache/serie.json` con todos los departamentos y meses (`{ "months": [...], "data": { "06007": { "value": [...], "anomaly": [...] } }, "clim": {...} }`). Lo regenera solo cuando cambia la carpeta `datos/` o `config.json`: guarda junto al caché una huella de la configuración y de los CSV (nombre, tamaño y fecha de modificación de cada archivo) y la compara en cada pedido. Así detecta archivos nuevos, borrados o reescritos dentro del mismo segundo. El resto del tiempo devuelve el archivo ya armado. Si un CSV no tiene las columnas configuradas (por defecto `in1,focos,anomalia`), responde un error 500 que nombra el archivo, en lugar de tomarlo como un mes vacío.
-- **Tampoco recibe parámetros:** devuelve la serie completa y el navegador la carga una sola vez. Si el tamaño lo exige, se puede filtrar por departamento con `serie.php?in1=XXXXX`, validando el parámetro con `^\d{5}$` antes de usarlo. Esa respuesta es `{ "in1", "months", "value", "anomaly", "clim" }`: las claves son genéricas y no dependen del nombre de las columnas en `config.json`.
+- Los CSV mensuales en `datos/<id>/` siguen siendo el **contrato con el proceso de SEPA**: el formato no cambia, solo la carpeta (los de MODIS van en `datos/modis/`).
+- `serie.php?fuente=<id>` (misma validación que `listar.php`) arma un `cache/serie_<id>.json` por fuente con todos los departamentos y meses (`{ "months": [...], "data": { "06007": { "value": [...], "anomaly": [...] } }, "clim": {...} }`). Lo regenera solo cuando cambia la carpeta `datos/<id>/` o `config.json`: guarda junto al caché una huella de la configuración y de los CSV (nombre, tamaño y fecha de modificación de cada archivo) y la compara en cada pedido. Así detecta archivos nuevos, borrados o reescritos dentro del mismo segundo. El resto del tiempo devuelve el archivo ya armado. Si un CSV no tiene las columnas configuradas (por defecto `in1,focos,anomalia`), responde un error 500 que nombra el archivo, en lugar de tomarlo como un mes vacío.
+- **Sin `in1`** devuelve la serie completa de la fuente y el navegador la carga una sola vez. Si el tamaño lo exige, se puede filtrar por departamento con `serie.php?in1=XXXXX`, validando el parámetro con `^\d{5}$` antes de usarlo. Esa respuesta es `{ "in1", "months", "value", "anomaly", "clim" }`: las claves son genéricas y no dependen del nombre de las columnas en `config.json`.
 
 ### Funcionalidades del visor
 
@@ -238,7 +258,7 @@ El gráfico de un departamento necesita todos sus meses. Si el navegador tuviera
 2. **Prototipo local** con la geometría y dos o tres meses de datos de ejemplo. Se valida el diseño antes de tocar el sitio.
 3. **Carga de la serie histórica** (2001 en adelante) desde la planilla departamental, con el script de conversión de `tools/`, y control contra la planilla provincial.
 4. **Integración en el sitio:** plantilla con el header y el footer, ubicación definitiva y link desde el menú de productos.
-5. **Operación mensual:** un cron del servidor de SEPA deja el CSV del mes en `datos/` (ver «Actualización mensual automática»). El visor lo muestra solo, sin tocar código.
+5. **Operación mensual:** un cron del servidor de SEPA deja el CSV del mes de cada fuente en `datos/<id>/` (ver «Actualización mensual automática»). El visor lo muestra solo, sin tocar código.
 
 ### Actualización mensual automática
 
@@ -246,21 +266,27 @@ La serie histórica se genera una sola vez con el motor de Node (`tools/compute_
 
 ```
 FIRMS_MAP_KEY=xxxxxxxx
-0 4 2 * * php /ruta/visor_deptos/lib/actualizar_mes.php --geojson /ruta/seccion-focos/data/geoJSON/DEPTOS-PROV.geojson >> /ruta/logs/visor_deptos.log 2>&1
+0 4 2 * * php /ruta/visor_deptos/lib/actualizar_mes.php --fuente modis --geojson /ruta/seccion-focos/data/geoJSON/DEPTOS-PROV.geojson >> /ruta/logs/visor_deptos.log 2>&1
+30 4 2 * * php /ruta/visor_deptos/lib/actualizar_mes.php --fuente viirs --geojson /ruta/seccion-focos/data/geoJSON/DEPTOS-PROV.geojson >> /ruta/logs/visor_deptos.log 2>&1
 ```
 
-- **Cuándo:** el día 2 de cada mes a las 4:00. Calcula el mes anterior, cuando el NRT de FIRMS ya está completo.
-- **De dónde saca los focos:** de la API de área de FIRMS (`MODIS_NRT`, recuadro de Argentina, pedidos de 5 días como máximo). Necesita un MAP_KEY, que es gratuito y va en la variable `FIRMS_MAP_KEY`, nunca en el código.
+- **Cuándo:** el día 2 de cada mes a las 4:00, una línea por fuente. Calcula el mes anterior, cuando el NRT de FIRMS ya está completo.
+- **Fuente:** `--fuente <id>` elige la fuente de `config.json` (por defecto, la primera): de ella salen la carpeta `datos/<id>/`, la climatología y la fuente de FIRMS (`firmsSource`).
+- **De dónde saca los focos:** de la API de área de FIRMS (`MODIS_NRT` o `VIIRS_SNPP_NRT`, recuadro de Argentina, pedidos de 5 días como máximo). Necesita un MAP_KEY, que es gratuito y va en la variable `FIRMS_MAP_KEY`, nunca en el código.
 - **Por qué no usa el archivo del visor de 5 días:** `firms_latest.csv` es una ventana de 7 días que se pisa en cada descarga. Para armar un mes habría que acumularlo, y si el cron se corta más de una semana el mes queda incompleto sin forma de recuperarlo. La API, en cambio, devuelve cualquier mes pasado.
-- **Mismas reglas que el motor:** todos los focos, `DEPTOS-PROV.geojson` completo (el mismo archivo que ya usa el visor de 5 días), 0 para los departamentos sin focos y clase contra el mismo mes de 2001–2025, que se lee de los CSV de `datos/`. Para agosto y septiembre de 2026 da exactamente los mismos archivos que el motor de Node.
+- **Mismas reglas que el motor:** todos los focos, `DEPTOS-PROV.geojson` completo (el mismo archivo que ya usa el visor de 5 días), 0 para los departamentos sin focos y clase contra el mismo mes de la climatología de la fuente (2001–2025 en MODIS), que se lee de los CSV de `datos/<id>/`. Para agosto y septiembre de 2026 da exactamente los mismos archivos que el motor de Node.
 - **Sin meses a medias:** si un pedido falla, la clave no es válida o la respuesta no es un CSV de FIRMS, termina con código 1, deja el error en el log y no escribe nada. El archivo se escribe con un nombre temporal y se renombra al final.
 - **Rehacer un mes:** `--mes AAAAMM`. Con `--csv archivo.csv` lee una descarga hecha a mano en lugar de usar la API.
 - **NRT y datos definitivos:** el NRT puede diferir un poco de los datos definitivos (`MODIS_SP`), que FIRMS publica dos o tres meses después. Si SEPA quiere los definitivos, alcanza con una segunda línea en el cron: `--source MODIS_SP --mes <de hace tres meses>`. Rehacer un mes de 2001–2025 no recalcula las clases de los otros meses: para eso se vuelve a correr el motor de Node.
 
+### Actualización mensual manual
+
+Si el cron no se puede instalar, el mes se puede calcular a mano en una PC con Windows, sin instalar nada: se descarga de FIRMS el CSV MODIS del mes, se lo copia (o la carpeta de la descarga entera) en `nasa/modis/`, junto a `procesar_focos.exe`, y se hace doble clic. El programa escribe `datos/modis/focos_AAAAMM.csv`, que después se sube a `datos/modis/` del visor, y mueve la descarga a `nasa/modis/procesados/`. Para VIIRS se copia el CSV VIIRS S-NPP en `nasa/viirs/` y el programa escribe en `datos/viirs/`; con las dos carpetas cargadas, un doble clic procesa ambas. Una descarga que cubre toda la climatología de la fuente (el archive completo de FIRMS) rearma en cambio todos los meses y `referencia.csv`, con el mismo resultado que `tools/compute_anomalies.mjs`: así se arma el histórico la primera vez. Así `datos/` tiene solo lo que va al visor. Aplica las mismas reglas que el cron y da el mismo archivo. La carpeta de la fuente tiene que tener el histórico (para la referencia: 2001–2025 en MODIS, 2012–2025 en VIIRS). Si la descarga trae varios meses, escribe uno por mes, con el mismo resultado que procesarlos de a uno en orden. Como FIRMS solo trae los días con focos, no se puede saber con certeza si un mes está completo: el programa muestra la fecha del primer y del último foco y avisa si el primer mes empieza después del día 1 o el último termina antes de fin de mes (por ejemplo, el mes en curso), para volver a procesarlo cuando termine. Es un paso manual mensual, justo lo que el cron evita (ver «Idea central»), así que conviene usarlo solo mientras no haya cron.
+
 ## Riesgos
 
 - **Formato de entrega mensual sin definir.** Los datos existen (ver "Datos recibidos de SEPA"), pero hoy viven en una planilla que se completa a mano, y PHP no lee `.xlsx` sin una librería externa. Lo ideal es que SEPA exporte cada mes el CSV en el formato acordado. Si no puede, alguien tiene que correr el script de conversión todos los meses, y eso es justo lo que el diseño busca evitar (ver "Idea central"). El motor de FIRMS saca la planilla del medio, y el cron mensual (ver «Actualización mensual automática») saca el paso manual. Falta que SEPA instale el cron, saque un MAP_KEY de FIRMS y confirme que el servidor puede consultar la API (ya descarga de FIRMS el CSV del visor de 5 días).
-- **Continuidad de MODIS.** Terra y Aqua llevan más de 20 años en órbita y se acercan al fin de su misión, y el sitio ya publica productos con VIIRS. Conviene decidir desde el principio con qué sensor se arma el visor, o que la columna de datos indique el sensor.
+- **Continuidad de MODIS.** Terra y Aqua llevan más de 20 años en órbita y se acercan al fin de su misión, y el sitio ya publica productos con VIIRS. Por eso el visor muestra cada sensor en su pestaña (MODIS y VIIRS S-NPP, ver «Configuración del conjunto de datos»): cuando MODIS deje de publicarse, VIIRS sigue sin cambios de código. La serie VIIRS es más corta (desde 2012), así que su referencia de anomalía cubre menos años.
 - **Mantenimiento.** Si nadie del equipo de SEPA toma el visor como propio, se desactualiza. Por eso sigue el formato de sus otros visores.
 - **`descargarkml.php` acepta cualquier valor en `uri`.** Con `?uri=x` responde 200 con un KML. No se exploró más, pero conviene revisarlo con el mismo criterio que `listar_archivos_MNC.php` antes de enlazarlo desde el visor nuevo.
 

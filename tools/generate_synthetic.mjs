@@ -4,9 +4,9 @@
 //
 // Uso:
 //   node tools/generate_synthetic.mjs [--geo visor_deptos/deptos.geo.json]
-//        [--out visor_deptos/datos] [--from 200101] [--to 202608] [--seed 20260908]
+//        [--out visor_deptos/datos/modis] [--from 200101] [--to 202608] [--seed 20260908]
 //
-// Contrato de salida (igual que los archivos reales de SEPA): datos/focos_AAAAMM.csv con encabezado
+// Contrato de salida (igual que los archivos reales de SEPA): datos/modis/focos_AAAAMM.csv con encabezado
 // `in1,focos,anomalia`, una fila por departamento. anomalia es la clase 1-5 de SEPA respecto del
 // mismo departamento y mes calendario en 2001-2025, calculada igual que en el conversor.
 
@@ -195,7 +195,7 @@ export function writeDataset({ departments, from, to, seed, outDir }) {
 function parseArgs(argv) {
   const opts = {
     geo: join(repoRoot, 'visor_deptos', 'deptos.geo.json'),
-    out: join(repoRoot, 'visor_deptos', 'datos'),
+    out: join(repoRoot, 'visor_deptos', 'datos', 'modis'),
     from: '200101',
     to: '202608',
     seed: '20260908',

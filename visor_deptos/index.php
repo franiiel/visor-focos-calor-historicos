@@ -2,10 +2,10 @@
 // Visor departamental de focos de calor, con la plantilla de las páginas de producto del sitio de SEPA:
 // el menú, el pie de página y los estilos del sitio se incluyen desde $root.
 
-// $root es relativo a esta carpeta: /productos/focos/anomalia_deptos/ queda tres niveles por debajo de
-// la raíz del sitio. Si la carpeta se mueve a otra profundidad, hay que ajustarlo. SEPA_ROOT solo se
-// define en local, para usar los stubs de tools/sepa_local/.
-$root = getenv('SEPA_ROOT') ?: '../../../';
+// $root es relativo a esta carpeta, que en el sitio de SEPA queda cuatro niveles por debajo de la raíz.
+// Si la carpeta se mueve a otra profundidad, hay que ajustarlo. SEPA_ROOT solo se define en local,
+// para usar los stubs de tools/sepa_local/.
+$root = getenv('SEPA_ROOT') ?: '../../../../';
 $seccion = 'Productos';
 
 // Invalidación de caché: la versión cambia cada vez que cambia el archivo.
@@ -73,7 +73,7 @@ header('Content-Type: text/html; charset=utf-8');
 
             <div class="cajaProductos">
                 <h2><a href="<?php echo $root; ?>productos/" class="seccion">Focos de calor</a><br>
-                <?php echo h($config['title']); ?></h2>
+                Focos de calor por departamento</h2>
             </div>
 
             <div class="clearfix"></div>
@@ -94,11 +94,19 @@ header('Content-Type: text/html; charset=utf-8');
     <label>Departamento
       <select id="sel-depto" disabled><option value="">Todos</option></select>
     </label>
-    <fieldset class="visor-layer">
-      <legend>Capa</legend>
-      <label><input type="radio" name="layer" value="anomaly" checked> Anomalía</label>
-      <label><input type="radio" name="layer" value="value"> <?php echo h($config['valueLabel']); ?></label>
-    </fieldset>
+    <div class="visor-layer-row">
+      <fieldset class="visor-layer">
+        <legend>Capa</legend>
+        <label><input type="radio" name="layer" value="anomaly" checked> Anomalía</label>
+        <label><input type="radio" name="layer" value="value"> <?php echo h($config['valueLabel']); ?></label>
+      </fieldset>
+      <div class="visor-tabs" id="sources" role="group" aria-label="Sensor">
+<?php foreach ($config['sources'] as $i => $source): ?>
+        <button type="button" data-source="<?php echo h($source['id']); ?>"
+                aria-pressed="<?php echo $i === 0 ? 'true' : 'false'; ?>"><?php echo h($source['label']); ?></button>
+<?php endforeach; ?>
+      </div>
+    </div>
   </form>
 
   <div class="visor-error" id="error" role="alert" hidden></div>
@@ -112,11 +120,22 @@ header('Content-Type: text/html; charset=utf-8');
     <aside class="visor-panel" id="panel">
       <div class="visor-panel-head">
         <h2 id="panel-title">Argentina</h2>
-        <button type="button" class="visor-icon-btn" id="chart-expand" aria-pressed="false"
-                aria-label="Ampliar gráfico" title="Ampliar gráfico">
-          <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
-          <svg class="icon-collapse" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
-        </button>
+        <div class="visor-panel-actions">
+          <details class="visor-download">
+            <summary class="visor-icon-btn" aria-label="Descargar" title="Descargar">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+            </summary>
+            <div class="visor-download-menu">
+              <button type="button" id="chart-csv">Datos (CSV)</button>
+              <button type="button" id="chart-png">Imagen (PNG)</button>
+            </div>
+          </details>
+          <button type="button" class="visor-icon-btn" id="chart-expand" aria-pressed="false"
+                  aria-label="Ampliar gráfico" title="Ampliar gráfico">
+            <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+            <svg class="icon-collapse" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+          </button>
+        </div>
       </div>
       <p id="panel-info" class="visor-hint">Cargando serie…</p>
       <p class="visor-hint">Elija una provincia o un departamento en el mapa para ver su serie.</p>
@@ -124,10 +143,27 @@ header('Content-Type: text/html; charset=utf-8');
         <canvas id="chart" aria-label="Serie mensual de <?php echo h($config['unit']); ?>" role="img"></canvas>
       </div>
     </aside>
-  </div>
 
-  <section class="visor-years" aria-labelledby="years-title">
-    <h2 id="years-title">Comparación por año</h2>
+  <section class="visor-years" id="years" aria-labelledby="years-title">
+    <div class="visor-panel-head">
+      <h2 id="years-title">Comparación por año</h2>
+      <div class="visor-panel-actions">
+        <details class="visor-download">
+          <summary class="visor-icon-btn" aria-label="Descargar" title="Descargar">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+          </summary>
+          <div class="visor-download-menu">
+            <button type="button" id="years-csv">Datos (CSV)</button>
+            <button type="button" id="years-png">Imagen (PNG)</button>
+          </div>
+        </details>
+        <button type="button" class="visor-icon-btn" id="years-expand" aria-pressed="false"
+                aria-label="Ampliar gráfico" title="Ampliar gráfico">
+          <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+          <svg class="icon-collapse" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+        </button>
+      </div>
+    </div>
     <div class="visor-years-filter">
       <label>Agregar año
         <select id="years-add"></select>
@@ -139,8 +175,9 @@ header('Content-Type: text/html; charset=utf-8');
       <canvas id="years-chart" aria-label="<?php echo h($config['unit']); ?> por mes de los años elegidos, con el promedio, el máximo y el mínimo históricos" role="img"></canvas>
     </div>
   </section>
+  </div>
 
-  <p class="visor-note"><?php echo h($config['note']); ?></p>
+  <p class="visor-note" id="note"><?php echo h($config['sources'][0]['note']); ?></p>
 </main>
 
 <script type="application/json" id="visor-config"><?php

@@ -1,9 +1,10 @@
 <?php
-// Serie mensual de todos los departamentos, consolidada a partir de los CSV de datos/ descritos
-// en config.json y guardada en caché en cache/serie.json (ver lib/series.php para la estructura).
+// Serie mensual de todos los departamentos de una fuente, consolidada a partir de los CSV de
+// datos/<id>/ y guardada en caché en cache/serie_<id>.json (ver lib/series.php para la estructura).
 //
-// Parámetro opcional: in1 (exactamente 5 dígitos). Si está presente, devuelve solo ese
-// departamento: { "in1", "months", "value", "anomaly", "clim" }.
+// Parámetros opcionales:
+// - fuente: un id de `sources` en config.json (sin él, la primera fuente). Nunca una ruta.
+// - in1 (exactamente 5 dígitos): devuelve solo ese departamento: { "in1", "months", "value", "anomaly", "clim" }.
 
 require __DIR__ . '/lib/config.php';
 require __DIR__ . '/lib/series.php';
@@ -29,10 +30,19 @@ if (isset($_GET['in1'])) {
 
 try {
     $config = visor_config(__DIR__ . '/config.json');
-    $json = series_cached_json(__DIR__ . '/datos', __DIR__ . '/cache/serie.json', $config);
 } catch (VisorConfigException $e) {
     error_log('serie.php: ' . $e->getMessage());
     serie_error(500, 'Configuración inválida: config.json.');
+}
+$fuente = $_GET['fuente'] ?? null;
+$config = ($fuente === null || is_string($fuente)) ? visor_source($config, $fuente) : null;
+if ($config === null) {
+    serie_error(400, 'Parámetro fuente inválido.');
+}
+
+try {
+    $id = $config['id'];
+    $json = series_cached_json(__DIR__ . "/datos/$id", __DIR__ . "/cache/serie_$id.json", $config);
 } catch (SeriesCsvException $e) {
     // Se nombra solo el archivo; la ruta absoluta queda en el log del servidor.
     error_log('serie.php: ' . $e->getMessage());

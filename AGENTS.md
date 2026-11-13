@@ -12,13 +12,15 @@ The PHP endpoints have been verified locally with PHP 8.3 (`listar.php`, `serie.
 
 ```sh
 node tools/build_geometry.mjs          # download + simplify geometry -> visor_deptos/deptos.geo.json (pinned mapshaper via npx)
-node tools/generate_synthetic.mjs      # synthetic CSVs -> visor_deptos/datos/ (deterministic, gitignored)
-node tools/compute_anomalies.mjs --firms DL_FIRE_M-C61_43028  # FIRMS points -> visor_deptos/datos/ (needs tools/raw/DEPTOS-PROV.geojson from build_geometry)
-node tools/convert_excel.mjs --xlsx ESTADISTICAS-DEPARTAMENTALES2026.xlsx  # SEPA workbook -> visor_deptos/datos/
+node tools/generate_synthetic.mjs      # synthetic CSVs -> visor_deptos/datos/modis/ (deterministic, gitignored)
+node tools/compute_anomalies.mjs [--fuente viirs] --firms DL_FIRE_M-C61_43028  # FIRMS points -> visor_deptos/datos/<fuente>/ (needs tools/raw/DEPTOS-PROV.geojson from build_geometry)
+node tools/convert_excel.mjs --xlsx ESTADISTICAS-DEPARTAMENTALES2026.xlsx  # SEPA workbook -> visor_deptos/datos/modis/
 node --test "tools/test/*.test.mjs"    # unit tests (a bare directory argument does not work in Node 24)
 php tools/test/series_test.php         # PHP tests for lib/series.php (plain PHP, exit code 0/1)
 php tools/test/actualizar_mes_test.php # PHP tests for the monthly cron script
-FIRMS_MAP_KEY=... php visor_deptos/lib/actualizar_mes.php --geojson tools/raw/DEPTOS-PROV.geojson [--mes AAAAMM] [--csv file]  # monthly update (cron, PHP only)
+FIRMS_MAP_KEY=... php visor_deptos/lib/actualizar_mes.php --geojson tools/raw/DEPTOS-PROV.geojson [--fuente id] [--mes AAAAMM] [--csv file]  # monthly update (cron, PHP only)
+node tools/procesar_mes.mjs --nasa <folder> [--fuente id] [--datos <folder>]  # manual monthly update: FIRMS download -> datos/<fuente>/focos_AAAAMM.csv (a download covering the whole climatology rebuilds every month like compute_anomalies; the .exe processes each nasa/<fuente>/)
+node tools/build_exe.mjs                        # package procesar_mes.mjs as dist/procesar_focos.exe (Windows, Node SEA)
 SEPA_ROOT=../tools/sepa_local/ php -S localhost:8000 -t visor_deptos  # serve the viewer with stub SEPA includes (needs PHP 7.4+)
 ```
 
@@ -33,13 +35,13 @@ It is a separate product from AgroENSO. Don't reuse its pipeline or couple the t
 ## Architecture constraints (from the design doc)
 
 - **Mirror the existing SEPA viewer** at `/productos/focos/seccion-focos/` (same INTA-UNAHUR agreement): a PHP template with the site header and footer, ES-module JS, plain CSS. No framework, no npm, no build step, no database. Files are edited and uploaded as-is.
-- **Data contract with SEPA:** one CSV per month in `datos/focos_AAAAMM.csv` with columns `in1,focos,anomalia`. SEPA's monthly process drops these files; the viewer must pick them up with no code changes.
-- **Dataset config:** `visor_deptos/config.json` (validated by `lib/config.php`) holds everything dataset-specific: CSV prefix, value/anomaly column names, integer rounding, climatology period and UI texts. Its defaults are the SEPA contract above. Never hardcode those in code; internally the two columns are always `value` and `anomaly`. One dataset per installation.
+- **Data contract with SEPA:** one CSV per month and source in `datos/<fuente>/focos_AAAAMM.csv` (e.g. `datos/modis/`, `datos/viirs/`) with columns `in1,focos,anomalia`. SEPA's monthly process drops these files; the viewer must pick them up with no code changes.
+- **Dataset config:** `visor_deptos/config.json` (validated by `lib/config.php`) holds everything dataset-specific: CSV prefix, value/anomaly column names, integer rounding, UI texts, and `sources` (one viewer tab per satellite sensor: `id` = data/cache folder name, `label`, `firmsSource`, `climatology`, `note`). `visor_source()` (PHP) and `sourceConfig()` (`tools/convert_excel.mjs`) flatten one source with the common fields; use them instead of reading `sources` by hand. Never hardcode those in code; internally the two columns are always `value` and `anomaly`. Sources never mix: each has its own CSVs, cache and climatology (MODIS 2001–2025, VIIRS S-NPP 2012–2025).
 - **Join key:** `in1` is the 5-digit INDEC department code, stored as a string so the leading zero is kept. It matches `LINK` in SEPA's `DEPTOS-PROV.geojson`. Never join by `id` (it has no zero padding) or by name.
 - **PHP endpoints:**
-  - `listar.php` takes no parameters and lists the available months.
-  - `serie.php` builds and caches `cache/serie.json`, regenerating it when the fingerprint (sha1 of the config plus every CSV's name, size and mtime) differs from the one stored in the cache. A CSV without the configured columns is a 500 error naming the file, never an empty month. An invalid `config.json` is a 500 naming it, on every entry point.
-  - `lib/actualizar_mes.php` is the CLI-only monthly cron job (FIRMS area API, `FIRMS_MAP_KEY` from the environment). It must produce exactly what `tools/compute_anomalies.mjs` produces for the same month; keep the two in sync.
+  - `listar.php` lists the available months of one source. Its only parameter, `fuente`, is checked against the `id` whitelist in `config.json` (never used as a path; absent = first source; anything else = 400).
+  - `serie.php` (same `fuente` rule, plus `in1`) builds and caches `cache/serie_<fuente>.json`, regenerating it when the fingerprint (sha1 of the config plus every CSV's name, size and mtime) differs from the one stored in the cache. A CSV without the configured columns is a 500 error naming the file, never an empty month. An invalid `config.json` is a 500 naming it, on every entry point.
+  - `lib/actualizar_mes.php` is the CLI-only monthly cron job (FIRMS area API, `FIRMS_MAP_KEY` from the environment). It must produce exactly what `tools/compute_anomalies.mjs` produces for the same month; keep the two in sync. `tools/procesar_mes.mjs` (shipped as `procesar_focos.exe` for a manual monthly run on a Windows PC) ports `monthly_build` 1:1 and must give byte-identical output to `actualizar_mes.php --csv`.
   - Any parameter an endpoint does accept must be strictly validated (e.g. `^\d{5}$`). Path or URI inputs are a known weak spot on the SEPA site (`listar_archivos_MNC.php`, `descargarkml.php`).
 - **Pin CDN library versions** (Leaflet 1.9.4, Chart.js). The existing SEPA viewers load Leaflet unversioned; don't copy that.
 - The geometry is generated once from `DEPTOS-PROV.geojson` (~13 MB, too heavy as-is), simplified and stored as a static file.

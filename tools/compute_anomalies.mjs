@@ -1,13 +1,16 @@
 #!/usr/bin/env node
-// Calcula los CSV mensuales del visor a partir de focos crudos de NASA FIRMS MODIS:
-// datos/<filePrefix>_AAAAMM.csv con `in1,<value>,<anomaly>`, más datos/referencia.csv
+// Calcula los CSV mensuales del visor a partir de focos crudos de NASA FIRMS (MODIS o VIIRS):
+// datos/<fuente>/<filePrefix>_AAAAMM.csv con `in1,<value>,<anomaly>`, más datos/<fuente>/referencia.csv
 // con las estadísticas de referencia (máximo, media, mínimo, desviación estándar) por departamento y
 // mes calendario.
 //
 // Uso:
 //   node tools/compute_anomalies.mjs --firms DL_FIRE_M-C61_43028
-//        [--geojson tools/raw/DEPTOS-PROV.geojson] [--config visor_deptos/config.json]
-//        [--out visor_deptos/datos]
+//        [--fuente modis] [--geojson tools/raw/DEPTOS-PROV.geojson] [--config visor_deptos/config.json]
+//        [--out visor_deptos/datos/<fuente>]
+//
+// --fuente es un id de `sources` en config.json (por defecto, la primera); define la climatología y la
+// carpeta de salida. La descarga de --firms tiene que ser de ese sensor (p. ej. SV-C2 para viirs).
 //
 // --firms es una carpeta de descarga de FIRMS: un fire_archive_*.csv y, opcionalmente, un
 // fire_nrt_*.csv. Los puntos NRT cuentan solo después del último día del archive. Todo punto
@@ -21,7 +24,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { normalizeFeatures } from './build_geometry.mjs';
-import { classifySeries, monthFiles } from './convert_excel.mjs';
+import { classifySeries, monthFiles, sourceConfig } from './convert_excel.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -102,7 +105,7 @@ export function readFirms(text) {
 
 // ---------- Motor ----------
 
-function monthRange(from, to) {
+export function monthRange(from, to) {
   const months = [];
   for (let y = Number(from.slice(0, 4)), m = Number(from.slice(4)); `${y}${String(m).padStart(2, '0')}` <= to; m === 12 ? (y++, m = 1) : m++) {
     months.push(`${y}${String(m).padStart(2, '0')}`);
@@ -120,7 +123,12 @@ export function computeAnomalies({ archive, nrt, geojson, config }) {
   const lastArchive = maxDate(points);
   if (nrt) points.push(...readFirms(nrt).filter((p) => p.date > lastArchive));
   if (!points.length) throw new Error('FIRMS files have no points');
+  return buildHistory(points, geojson, config);
+}
 
+// Igual que computeAnomalies, pero con los puntos ya leídos (lo usa también procesar_mes.mjs). log, si
+// está, recibe el avance de la asignación cada 10 %.
+export function buildHistory(points, geojson, config, log = null) {
   const depts = prepareDepartments(geojson);
   const months = monthRange(
     points.reduce((a, p) => (p.date < a ? p.date : a), points[0].date).slice(0, 7).replace('-', ''),
@@ -128,7 +136,10 @@ export function computeAnomalies({ archive, nrt, geojson, config }) {
   );
   const series = new Map(depts.map(({ in1 }) => [in1, new Map(months.map((m) => [m, 0]))]));
   let dropped = 0;
-  for (const p of points) {
+  const step = Math.ceil(points.length / 10);
+  for (let i = 0; i < points.length; i++) {
+    if (log && (i + 1) % step === 0) log(`  asignando focos a departamentos: ${Math.round((100 * (i + 1)) / points.length)} %`);
+    const p = points[i];
     const in1 = findDepartment(depts, p.lon, p.lat);
     if (!in1) {
       dropped++;
@@ -160,9 +171,10 @@ export function computeAnomalies({ archive, nrt, geojson, config }) {
 function parseArgs(argv) {
   const opts = {
     firms: null,
+    fuente: null,
     geojson: join(repoRoot, 'tools', 'raw', 'DEPTOS-PROV.geojson'),
     config: join(repoRoot, 'visor_deptos', 'config.json'),
-    out: join(repoRoot, 'visor_deptos', 'datos'),
+    out: null,
   };
   for (let i = 0; i < argv.length; i += 2) {
     const key = argv[i].replace(/^--/, '');
@@ -194,15 +206,14 @@ function main() {
   } catch (err) {
     throw new Error(`Cannot read ${opts.geojson} (run node tools/build_geometry.mjs to download it): ${err.message}`);
   }
-  // Se quita un BOM UTF-8, como hace lib/config.php.
-  const config = JSON.parse(readFileSync(resolve(opts.config), 'utf8').replace(/^﻿/, ''));
+  const config = sourceConfig(readFileSync(resolve(opts.config), 'utf8'), opts.fuente);
   const { files, reference, dropped, lastDate } = computeAnomalies({
     archive: readFileSync(archivePath, 'utf8'),
     nrt: nrtPath && readFileSync(nrtPath, 'utf8'),
     geojson,
     config,
   });
-  const out = resolve(opts.out);
+  const out = resolve(opts.out ?? join(repoRoot, 'visor_deptos', 'datos', config.id));
   mkdirSync(out, { recursive: true });
   for (const { name, content } of files) writeFileSync(join(out, name), content);
   writeFileSync(join(out, 'referencia.csv'), reference);

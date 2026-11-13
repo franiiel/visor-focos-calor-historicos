@@ -7,13 +7,27 @@
   "valueLabel": "Focos totales",
   "valueTitle": "Focos de calor totales",
   "anomalyTitle": "Anomalía de focos de calor",
-  "climatology": { "from": "200101", "to": "202512" },
   "anomalyClasses": [
     "Igual o por debajo del mínimo histórico",
-    "Por debajo de lo normal",
-    "Normal",
-    "Por encima de lo normal",
+    "Por debajo del promedio (-10 %)",
+    "Promedio",
+    "Por encima del promedio (+10 %)",
     "Por encima del máximo histórico"
   ],
-  "note": "Anomalía: compara los focos del mes con los del mismo mes en 2001–2025. Normal es estar dentro de ±10 % del promedio; los extremos son el mínimo y el máximo de ese período."
+  "sources": [
+    {
+      "id": "modis",
+      "label": "MODIS",
+      "firmsSource": "MODIS_NRT",
+      "climatology": { "from": "200101", "to": "202512" },
+      "note": "Anomalía: compara los focos del mes con los del mismo mes en 2001–2025. Promedio es estar dentro de ±10 % del promedio; los extremos son el mínimo y el máximo de ese período."
+    },
+    {
+      "id": "viirs",
+      "label": "VIIRS S-NPP",
+      "firmsSource": "VIIRS_SNPP_NRT",
+      "climatology": { "from": "201201", "to": "202512" },
+      "note": "Anomalía: compara los focos del mes con los del mismo mes en 2012–2025. Promedio es estar dentro de ±10 % del promedio; los extremos son el mínimo y el máximo de ese período."
+    }
+  ]
 }

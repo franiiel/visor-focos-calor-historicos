@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 // Convierte el libro departamental de SEPA (ESTADISTICAS-DEPARTAMENTALES*.xlsx) en los
-// CSV mensuales del visor: datos/<filePrefix>_AAAAMM.csv con `in1,<value>,<anomaly>`.
+// CSV mensuales del visor: datos/<fuente>/<filePrefix>_AAAAMM.csv con `in1,<value>,<anomaly>`.
 //
 // Uso:
 //   node tools/convert_excel.mjs --xlsx ESTADISTICAS-DEPARTAMENTALES2026.xlsx
-//        [--config visor_deptos/config.json] [--out visor_deptos/datos]
+//        [--fuente modis] [--config visor_deptos/config.json] [--out visor_deptos/datos/<fuente>]
+//
+// --fuente es un id de `sources` en config.json (por defecto, la primera: el libro de SEPA es MODIS).
 //
 // Lee dos hojas: FCXMESXAÑO (focos por año, nombre de provincia y de departamento, una
 // columna por mes) y ESTADISTICAS (COD_PROV + COD_DEPTO por nombre). La anomalía es
@@ -218,6 +220,16 @@ export function convertWorkbook(buf, config) {
   return { files: monthFiles(byMonth, config), skipped };
 }
 
+// Texto de config.json -> configuración de una fuente: los campos comunes más los de la fuente
+// (id, climatology, …), igual que visor_source de lib/config.php. Sin id, la primera fuente.
+export function sourceConfig(text, id) {
+  // Se quita un BOM UTF-8, como hace lib/config.php.
+  const { sources, ...common } = JSON.parse(text.replace(/^﻿/, ''));
+  const source = id == null ? sources?.[0] : sources?.find((s) => s.id === id);
+  if (!source) throw new Error(`Unknown --fuente ${id} (not in the sources of config.json)`);
+  return { ...common, ...source };
+}
+
 // byMonth (ver classifySeries) -> [{ name: '<filePrefix>_AAAAMM.csv', content }].
 export function monthFiles(byMonth, config) {
   const header = `in1,${config.columns.value},${config.columns.anomaly}`;
@@ -230,8 +242,9 @@ export function monthFiles(byMonth, config) {
 function parseArgs(argv) {
   const opts = {
     xlsx: null,
+    fuente: null,
     config: join(repoRoot, 'visor_deptos', 'config.json'),
-    out: join(repoRoot, 'visor_deptos', 'datos'),
+    out: null,
   };
   for (let i = 0; i < argv.length; i += 2) {
     const key = argv[i].replace(/^--/, '');
@@ -246,10 +259,9 @@ function parseArgs(argv) {
 
 function main() {
   const opts = parseArgs(process.argv.slice(2));
-  // Se quita un BOM UTF-8, como hace lib/config.php.
-  const config = JSON.parse(readFileSync(resolve(opts.config), 'utf8').replace(/^﻿/, ''));
+  const config = sourceConfig(readFileSync(resolve(opts.config), 'utf8'), opts.fuente);
   const { files, skipped } = convertWorkbook(readFileSync(resolve(opts.xlsx)), config);
-  const out = resolve(opts.out);
+  const out = resolve(opts.out ?? join(repoRoot, 'visor_deptos', 'datos', config.id));
   mkdirSync(out, { recursive: true });
   for (const { name, content } of files) writeFileSync(join(out, name), content);
   console.log(`Wrote ${files.length} monthly CSVs (${files[0]?.name} … ${files.at(-1)?.name}) to ${out}`);

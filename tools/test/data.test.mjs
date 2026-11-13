@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   parseMonthCsv, splitMonth, monthLabel, createLatestGuard, lustrumStart, lustrumMeans, sumSeries,
-  monthlyStats, yearValues,
+  monthlyStats, yearValues, chartCsv,
 } from '../../visor_deptos/data.js';
 
 const COLUMNS = { value: 'focos', anomaly: 'anomalia' };
@@ -114,4 +114,13 @@ test('createLatestGuard drops a late earlier response', async () => {
   };
   await Promise.all([request('old', 20), request('new', 0)]);
   assert.deepEqual(applied, ['new']);
+});
+
+test('chartCsv writes one column per dataset, blanks for null and rounds to 2 decimals', () => {
+  const csv = chartCsv(['200101', '200102'], [
+    { label: 'Focos en el mes', data: [3, null] },
+    { label: 'Promedio 2001, 2005', data: [12.333333333333334, 0.5] },
+    { label: 'Dice "hola"', data: [1, 2] },
+  ]);
+  assert.equal(csv, 'mes,Focos en el mes,"Promedio 2001, 2005","Dice ""hola"""\n200101,3,12.33,1\n200102,,0.5,2\n');
 });

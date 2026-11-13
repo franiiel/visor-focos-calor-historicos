@@ -5,8 +5,8 @@ tools/raw/
 visor_deptos/cache/*
 !visor_deptos/cache/.htaccess
 
-# Synthetic monthly CSVs: regenerate with `node tools/generate_synthetic.mjs`
-visor_deptos/datos/focos_*.csv
+# Monthly CSVs, one folder per source (datos/modis/, datos/viirs/): regenerate with the tools/ scripts
+visor_deptos/datos/*/focos_*.csv
 
 node_modules/
 
@@ -17,4 +17,7 @@ node_modules/
 DL_FIRE_*/
 
 # Reference statistics written by tools/compute_anomalies.mjs
-visor_deptos/datos/referencia.csv
+visor_deptos/datos/*/referencia.csv
+
+# Windows executable built by tools/build_exe.mjs
+dist/

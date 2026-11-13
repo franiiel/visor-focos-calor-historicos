@@ -1,15 +1,17 @@
 <?php
-// Actualización mensual, ejecutada por cron: calcula datos/<filePrefix>_AAAAMM.csv de un mes a partir de
-// los focos MODIS de NASA FIRMS, con las mismas reglas que tools/compute_anomalies.mjs (ver
-// VISOR_FOCOS.md): cuenta cada punto, punto en polígono contra el
+// Actualización mensual, ejecutada por cron: calcula datos/<fuente>/<filePrefix>_AAAAMM.csv de un mes a
+// partir de los focos de NASA FIRMS de una fuente de config.json (MODIS, VIIRS…), con las mismas reglas
+// que tools/compute_anomalies.mjs (ver VISOR_FOCOS.md): cuenta cada punto, punto en polígono contra el
 // DEPTOS-PROV.geojson completo, 0 para los departamentos sin puntos, clase 1-5 de SEPA respecto del
-// mismo mes calendario de la climatología de config.json, leída de los CSV de datos/.
+// mismo mes calendario de la climatología de esa fuente, leída de los CSV de datos/<fuente>/.
 //
 // Uso (solo CLI):
 //   FIRMS_MAP_KEY=... php lib/actualizar_mes.php --geojson /path/DEPTOS-PROV.geojson
-//       [--mes AAAAMM] [--source MODIS_NRT] [--csv local.csv] [--config ../config.json] [--datos ../datos]
+//       [--fuente modis] [--mes AAAAMM] [--source MODIS_NRT] [--csv local.csv] [--config ../config.json]
+//       [--datos ../datos/<fuente>]
 //
-// --mes toma por defecto el mes anterior. --csv lee un CSV local de FIRMS en lugar de la API.
+// --fuente es un id de `sources` (por defecto, la primera); --source y --datos toman por defecto su
+// firmsSource y su carpeta. --mes toma por defecto el mes anterior. --csv lee un CSV local de FIRMS en lugar de la API.
 // Ante cualquier error termina con código 1 y no escribe nada. Compatible con PHP 7.4+, sin dependencias.
 
 if (PHP_SAPI !== 'cli') {
@@ -223,10 +225,11 @@ function monthly_args($argv)
     $opts = [
         'geojson' => null,
         'mes' => null,
-        'source' => 'MODIS_NRT',
+        'fuente' => null,
+        'source' => null,
         'csv' => null,
         'config' => __DIR__ . '/../config.json',
-        'datos' => __DIR__ . '/../datos',
+        'datos' => null,
     ];
     for ($i = 1; $i < count($argv); $i += 2) {
         $key = preg_replace('/^--/', '', $argv[$i]);
@@ -239,7 +242,7 @@ function monthly_args($argv)
     if (!preg_match('/^\d{4}(0[1-9]|1[0-2])\z/', $opts['mes'])) {
         throw new RuntimeException("Invalid --mes {$opts['mes']} (expected AAAAMM)");
     }
-    if (!preg_match('/^[A-Z0-9_]+\z/', $opts['source'])) {
+    if ($opts['source'] !== null && !preg_match('/^[A-Z0-9_]+\z/', $opts['source'])) {
         throw new RuntimeException("Invalid --source {$opts['source']}");
     }
     if ($opts['geojson'] === null) {
@@ -253,7 +256,12 @@ function monthly_main($argv)
     try {
         $opts = monthly_args($argv);
         $month = $opts['mes'];
-        $config = visor_config($opts['config']);
+        $config = visor_source(visor_config($opts['config']), $opts['fuente']);
+        if ($config === null) {
+            throw new RuntimeException("Unknown --fuente {$opts['fuente']} (not in sources of {$opts['config']})");
+        }
+        $opts['source'] = $opts['source'] ?? $config['firmsSource'];
+        $opts['datos'] = $opts['datos'] ?? __DIR__ . '/../datos/' . $config['id'];
         if ($opts['csv'] !== null) {
             $text = @file_get_contents($opts['csv']);
             if ($text === false) {

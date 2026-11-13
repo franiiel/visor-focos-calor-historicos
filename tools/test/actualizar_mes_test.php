@@ -90,7 +90,8 @@ function run_cli($args, $env = [])
 
 $dir = make_dir();
 $config = json_decode(file_get_contents(__DIR__ . '/../../visor_deptos/config.json'), true);
-$config['climatology'] = ['from' => '200101', 'to' => '200212'];
+$config['sources'][0]['climatology'] = ['from' => '200101', 'to' => '200212'];
+$config['sources'][1]['climatology'] = ['from' => '199901', 'to' => '199912']; // VIIRS: sin referencia en datos/
 file_put_contents("$dir/config.json", json_encode($config));
 file_put_contents("$dir/geo.json", json_encode($geo));
 // Referencia de enero: 06021 tiene 2 y 4 (max 4, mean 3, min 2); 22007 tiene 1 y 0.
@@ -131,6 +132,11 @@ list($code, , $err) = run_cli(array_merge($base, ['--mes', '200302']), ['FIRMS_M
 check('download without FIRMS_MAP_KEY: exit 1 naming it', $code === 1 && strpos($err, 'FIRMS_MAP_KEY') !== false);
 list($code, , $err) = run_cli(['--mes', '200302', '--bogus', 'x']);
 check('unknown option: exit 1', $code === 1 && strpos($err, '--bogus') !== false);
+list($code, , $err) = run_cli(array_merge($base, ['--fuente', '../modis', '--mes', '200301', '--csv', "$dir/focos.csv"]));
+check('unknown --fuente: exit 1 naming it', $code === 1 && strpos($err, '../modis') !== false && scandir("$dir/datos") === $before);
+// --fuente viirs usa la climatología de VIIRS (sin meses de referencia aquí): sin clase.
+list($code) = run_cli(array_merge($base, ['--fuente', 'viirs', '--mes', '200301', '--csv', "$dir/focos.csv"]));
+check('--fuente viirs: its own climatology', $code === 0 && @file_get_contents("$dir/datos/focos_200301.csv") === "in1,focos,anomalia\n06021,5,\n22007,0,\n");
 remove_dir($dir);
 
 echo "\n$checks checks, $failures failed\n";
