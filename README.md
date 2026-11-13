@@ -1,8 +1,16 @@
-# Visor de focos de calor por departamento (prototipo)
+# Visor de focos de calor por departamento
 
-Mapa interactivo de focos de calor mensuales y su anomalía por departamento de Argentina. Es el prototipo local (fase 2) de la propuesta descrita en [`VISOR_FOCOS.md`](VISOR_FOCOS.md).
+Mapa interactivo de focos de calor mensuales y su anomalía por departamento de Argentina, para la plataforma SEPA del INTA. Reemplaza las imágenes mensuales estáticas de <https://sepa.inta.gob.ar/productos/focos/anomalia_deptos/>. El diseño y las decisiones están en [`VISOR_FOCOS.md`](VISOR_FOCOS.md).
 
-Los CSV mensuales se calculan desde los focos de NASA FIRMS con `tools/compute_anomalies.mjs` (ver «Calcular desde los focos de FIRMS»). La planilla departamental de SEPA queda como control, y también se puede convertir con `tools/convert_excel.mjs`. No se versionan. Para probar sin la planilla hay un generador de datos sintéticos.
+Los CSV mensuales se calculan desde los focos de NASA FIRMS: el histórico, una vez, con `tools/compute_anomalies.mjs` o `procesar_focos.exe`; cada mes nuevo, con el cron `lib/actualizar_mes.php` o con `procesar_focos.exe`. Las planillas de SEPA e INTA sirven de control, y la departamental de MODIS también se puede convertir con `tools/convert_excel.mjs`. Los CSV no se versionan. Para probar sin datos reales hay un generador de datos sintéticos.
+
+## Qué muestra el visor
+
+- **Mapa** por departamento con dos capas: la clase de anomalía (1 a 5) o los focos del mes. Se elige año, mes, provincia y departamento; al hacer clic en un departamento se selecciona.
+- **Pestañas por sensor**: MODIS (referencia 2001–2025) y VIIRS S-NPP (referencia 2012–2025). Cada una tiene sus propios datos; el enlace `…/#viirs` abre esa pestaña.
+- **Serie mensual** del área elegida (Argentina, una provincia o un departamento), con el promedio mensual de cada lustro.
+- **Comparación por año**: los meses de los años elegidos, con el promedio, el máximo y el mínimo históricos.
+- Los dos gráficos se pueden **ampliar** a pantalla completa y **descargar** como CSV o PNG.
 
 ## Qué incluye
 
@@ -36,18 +44,6 @@ node tools/build_geometry.mjs
 Descarga `DEPTOS-PROV.geojson` de SEPA en `tools/raw/` (si no está), normaliza el código `LINK` a 5 dígitos (`in1`), une los polígonos de cada departamento y simplifica con mapshaper 0.7.61 (versión fija, vía `npx`). Muestra la cantidad de departamentos, los códigos duplicados o faltantes y el tamaño del archivo. Opción: `--simplify 3%` (porcentaje de vértices que se conservan).
 
 `tools/raw/` no se versiona: contiene datos descargados.
-
-## Regenerar los datos sintéticos
-
-```sh
-node tools/generate_synthetic.mjs
-```
-
-Escribe `visor_deptos/datos/modis/focos_200101.csv` … `focos_202608.csv` (308 archivos, unos 2,6 MB) en menos de un segundo. El resultado es siempre el mismo para la misma semilla (`--seed`, por defecto 20260908). Otras opciones: `--from 200101 --to 202608` y `--out` (otra carpeta, por ejemplo `visor_deptos/datos/viirs`).
-
-Los CSV sintéticos **no se versionan** (están en `.gitignore`): se regeneran rápido y de forma determinista. Son datos inventados con una forma plausible, **no focos reales**, y el visor no los distingue de los de SEPA: usarlos solo para pruebas locales.
-
-`anomalia` es la clase 1–5 de SEPA respecto del mismo mes en 2001–2025, calculada con la misma regla que el conversor (ver «Convertir la planilla de SEPA»).
 
 ## Calcular desde los focos de FIRMS
 
@@ -126,6 +122,18 @@ Lee las hojas `FCXMESXAÑO` (focos por año, provincia y departamento) y `ESTADI
 
 Si un nombre no está en `ESTADISTICAS`, el conversor se detiene y lo nombra. Si un departamento tiene más de una fila en el mismo año, ese año queda sin dato y el conversor lo lista en un aviso: no adivina cuál es la fila correcta. La planilla de 2026 tiene tres casos (San Pedro 2022, San Roque 2022 y Comandante Fernández 2020), porque algunas filas tienen el año mal cargado. Usa solo la biblioteca estándar de Node.
 
+## Regenerar los datos sintéticos
+
+```sh
+node tools/generate_synthetic.mjs
+```
+
+Escribe `visor_deptos/datos/modis/focos_200101.csv` … `focos_202608.csv` (308 archivos, unos 2,6 MB) en menos de un segundo. El resultado es siempre el mismo para la misma semilla (`--seed`, por defecto 20260908). Otras opciones: `--from 200101 --to 202608` y `--out` (otra carpeta, por ejemplo `visor_deptos/datos/viirs`).
+
+Los CSV sintéticos **no se versionan** (están en `.gitignore`): se regeneran rápido y de forma determinista. Son datos inventados con una forma plausible, **no focos reales**, y el visor no los distingue de los de SEPA: usarlos solo para pruebas locales.
+
+`anomalia` es la clase 1–5 de SEPA respecto del mismo mes en 2001–2025, calculada con la misma regla que el conversor (ver «Convertir la planilla de SEPA»).
+
 ## Pruebas
 
 ```sh
@@ -134,7 +142,7 @@ php tools/test/series_test.php
 php tools/test/actualizar_mes_test.php
 ```
 
-Las pruebas de Node cubren las escalas y el formato (`scales.js`), la lectura de CSV, el control de pedidos superpuestos y los cálculos de los gráficos (`data.js`), el conversor (regla de clases, media y desvío sobre los años con dato, nombres desconocidos o repetidos y lectura de un `.xlsx` de prueba), el motor de FIRMS (punto en polígono con huecos y multipolígonos, NRT solo después del archivo histórico, ceros y referencias) y el generador (determinismo y formato de los archivos). La prueba de PHP no usa frameworks: cubre `lib/series.php` (forma de la serie, prefijo y columnas configurados, huella de la carpeta de datos y de la configuración, reutilización del caché y error ante un CSV sin las columnas requeridas), la validación de `config.json` (incluidas las fuentes) y las respuestas de `listar.php` y `serie.php` (forma del JSON, una carpeta y un caché por fuente, `fuente` fuera de la lista y códigos 400, 404 y 500), que corre como subprocesos sobre una copia temporal. Termina con código 0 si todo pasa.
+Las pruebas de Node cubren las escalas y el formato (`scales.js`), la lectura de CSV, el control de pedidos superpuestos y los cálculos de los gráficos (`data.js`), el conversor (regla de clases, media y desvío sobre los años con dato, nombres desconocidos o repetidos y lectura de un `.xlsx` de prueba), el motor de FIRMS (punto en polígono con huecos y multipolígonos, NRT solo después del archivo histórico, ceros y referencias), la actualización manual de `procesar_mes.mjs` (un mes, varios meses como si se procesaran de a uno, histórico completo igual que `compute_anomalies.mjs`, avisos de mes incompleto, una carpeta `nasa/<fuente>/` por fuente y errores que no tocan las carpetas) y el generador (determinismo y formato de los archivos). Las pruebas de PHP no usan frameworks. `actualizar_mes_test.php` cubre el cron: punto en polígono, regla de clases, ventanas de descarga de la API, el mes completo desde un CSV local, `--fuente` con su propia referencia y errores (CSV inválido, sin `FIRMS_MAP_KEY`, opción o fuente desconocida) que no escriben nada. `series_test.php`: cubre `lib/series.php` (forma de la serie, prefijo y columnas configurados, huella de la carpeta de datos y de la configuración, reutilización del caché y error ante un CSV sin las columnas requeridas), la validación de `config.json` (incluidas las fuentes) y las respuestas de `listar.php` y `serie.php` (forma del JSON, una carpeta y un caché por fuente, `fuente` fuera de la lista y códigos 400, 404 y 500), que corre como subprocesos sobre una copia temporal. Cada una termina con código 0 si todo pasa.
 
 ## Servir el visor
 
@@ -167,3 +175,7 @@ Para agregar una fuente (por ejemplo NOAA-20), sin tocar código:
 Para mostrar otra serie con la misma forma (un valor y su clase de anomalía 1 a 5), se editan los campos comunes: `filePrefix` (el prefijo), `columns.value` y `columns.anomaly` (nombres de las columnas, en minúsculas), `integerValues` (`true` para conteos), `anomalyClasses` (los 5 textos de las clases, de la 1 a la 5) y los textos (`title`, `unit`, `valueLabel`, `valueTitle`, `anomalyTitle`).
 
 Si `config.json` no es válido, la página y los dos endpoints responden un error 500 que nombra `config.json`; el detalle queda en el log de PHP. La descripción completa está en `VISOR_FOCOS.md` («Configuración del conjunto de datos»).
+
+## Autoría
+
+Visor de focos de calor para la plataforma SEPA del INTA, realizado en el marco del convenio INTA–UNAHUR para la materia Práctica Profesional Supervisada. Desarrollador: Franco Uriel Cerantonio.
