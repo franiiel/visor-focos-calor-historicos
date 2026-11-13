@@ -178,6 +178,9 @@ header('Content-Type: text/html; charset=utf-8');
   </div>
 
   <p class="visor-note" id="note"><?php echo h($config['sources'][0]['note']); ?></p>
+  <p class="visor-note">Visor de focos de calor para la plataforma SEPA del INTA, realizado en el
+    marco del convenio INTA–UNAHUR para la materia Práctica Profesional Supervisada.
+    Desarrollador: Franco Uriel Cerantonio.</p>
 </main>
 
 <script type="application/json" id="visor-config"><?php
