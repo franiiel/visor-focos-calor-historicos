@@ -79,13 +79,6 @@ header('Content-Type: text/html; charset=utf-8');
             <div class="clearfix"></div>
 
 <main class="visor" id="visor">
-  <div class="visor-tabs" id="sources" role="group" aria-label="Sensor">
-<?php foreach ($config['sources'] as $i => $source): ?>
-    <button type="button" data-source="<?php echo h($source['id']); ?>"
-            aria-pressed="<?php echo $i === 0 ? 'true' : 'false'; ?>"><?php echo h($source['label']); ?></button>
-<?php endforeach; ?>
-  </div>
-
   <p class="visor-subtitle" id="map-title" aria-live="polite">Cargando datos…</p>
 
   <form class="visor-controls" id="controls" onsubmit="return false;">
@@ -101,11 +94,19 @@ header('Content-Type: text/html; charset=utf-8');
     <label>Departamento
       <select id="sel-depto" disabled><option value="">Todos</option></select>
     </label>
-    <fieldset class="visor-layer">
-      <legend>Capa</legend>
-      <label><input type="radio" name="layer" value="anomaly" checked> Anomalía</label>
-      <label><input type="radio" name="layer" value="value"> <?php echo h($config['valueLabel']); ?></label>
-    </fieldset>
+    <div class="visor-layer-row">
+      <fieldset class="visor-layer">
+        <legend>Capa</legend>
+        <label><input type="radio" name="layer" value="anomaly" checked> Anomalía</label>
+        <label><input type="radio" name="layer" value="value"> <?php echo h($config['valueLabel']); ?></label>
+      </fieldset>
+      <div class="visor-tabs" id="sources" role="group" aria-label="Sensor">
+<?php foreach ($config['sources'] as $i => $source): ?>
+        <button type="button" data-source="<?php echo h($source['id']); ?>"
+                aria-pressed="<?php echo $i === 0 ? 'true' : 'false'; ?>"><?php echo h($source['label']); ?></button>
+<?php endforeach; ?>
+      </div>
+    </div>
   </form>
 
   <div class="visor-error" id="error" role="alert" hidden></div>

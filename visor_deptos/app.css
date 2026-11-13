@@ -23,7 +23,7 @@
 .visor-subtitle { margin: 0 0 0.75rem; color: var(--visor-muted); }
 
 /* Pestañas de fuente (MODIS, VIIRS…): la activa tiene aria-pressed="true". */
-.visor-tabs { display: flex; flex-wrap: wrap; border-bottom: 2px solid var(--visor-border); margin-bottom: 0.75rem; }
+.visor-tabs { display: flex; flex-wrap: wrap; border-bottom: 2px solid var(--visor-border); }
 .visor-tabs button {
   font: inherit;
   font-weight: 600;
@@ -49,7 +49,7 @@
 }
 .visor-controls label { display: flex; flex-direction: column; font-size: 0.85rem; gap: 0.2rem; min-width: 0; }
 .visor-controls select { font-size: 1rem; padding: 0.3rem; width: 100%; max-width: 100%; }
-.visor-controls .visor-layer { grid-column: 1 / -1; }
+.visor-layer-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.75rem 1.5rem; }
 .visor-layer { border: 0; padding: 0; margin: 0; display: flex; gap: 0.75rem; flex-wrap: wrap; }
 .visor-layer legend { font-size: 0.85rem; padding: 0; margin-bottom: 0.2rem; }
 .visor-layer label { flex-direction: row; align-items: center; font-size: 1rem; gap: 0.3rem; }
