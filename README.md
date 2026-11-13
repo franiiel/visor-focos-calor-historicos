@@ -91,20 +91,22 @@ Para una PC con Windows sin Node ni PHP. Se entrega `procesar_focos.exe` junto a
 
 ```
 procesar_focos.exe
-nasa/     <- acá se copia la descarga de FIRMS
+nasa/
+  modis/  <- acá se copia la descarga MODIS de FIRMS
+  viirs/  <- acá se copia la descarga VIIRS S-NPP de FIRMS
 datos/
   modis/  <- histórico focos_AAAAMM.csv (para la anomalía) y el mes nuevo, lo que se sube al visor
   viirs/  <- lo mismo para VIIRS S-NPP
 ```
 
-1. Descargar de NASA FIRMS los focos MODIS de Argentina de **un solo mes** en CSV (si viene en `.zip`, descomprimirlo).
-2. Copiar la descarga en `nasa/`: los CSV sueltos o la carpeta `DL_FIRE_*` entera, tal como viene.
-3. Hacer doble clic en `procesar_focos.exe`. Escribe `datos/modis/focos_AAAAMM.csv` y mueve la descarga a `nasa/procesados/`.
-4. Subir `focos_AAAAMM.csv` a la carpeta `datos/modis/` del visor.
+1. Descargar de NASA FIRMS los focos de Argentina de los meses nuevos (uno o varios) en CSV (si viene en `.zip`, descomprimirlo).
+2. Copiar la descarga en la carpeta de su sensor, `nasa/modis/` o `nasa/viirs/`: los CSV sueltos o la carpeta `DL_FIRE_*` entera, tal como viene.
+3. Hacer doble clic en `procesar_focos.exe`. Procesa cada carpeta de `nasa/` que tenga una descarga nueva, escribe `datos/<fuente>/focos_AAAAMM.csv` y mueve la descarga a `nasa/<fuente>/procesados/`. Con `--fuente <id>` (desde una consola) procesa solo esa fuente.
+4. Subir `focos_AAAAMM.csv` a la carpeta `datos/<fuente>/` del visor.
 
-Para VIIRS S-NPP, la descarga de `nasa/` tiene que ser de VIIRS y el programa se corre desde una consola (o un acceso directo) con `procesar_focos.exe --fuente viirs`: escribe en `datos/viirs/`.
+**Histórico completo.** Si la descarga cubre toda la climatología de la fuente (por ejemplo, el archive de VIIRS desde 2012 más el NRT), en lugar de un mes rearma todos los meses de la descarga y `referencia.csv`, igual que `tools/compute_anomalies.mjs`. Sirve para armar `datos/<fuente>/` la primera vez. El último mes de la descarga puede estar incompleto: conviene volver a procesarlo cuando termine.
 
-Si la descarga tiene focos de más de un mes, no es un CSV de FIRMS o falta algún CSV del histórico, muestra el error y no escribe ni mueve nada. Da exactamente el mismo archivo que `actualizar_mes.php --csv`. Para probarlo sin compilar: `node tools/procesar_mes.mjs --nasa <carpeta> [--fuente <id>] [--datos <carpeta>]` (además acepta `--geojson` y `--config`).
+Si la descarga trae varios meses, escribe uno por mes, igual que si se procesaran de a uno en orden; un mes sin focos en el medio sale con ceros. Muestra la fecha del primer y del último foco, y avisa (sin dejar de procesarlo) si el primer mes empieza después del día 1 o el último termina antes de fin de mes, porque puede estar incompleto: por ejemplo, el mes en curso. Si no es un CSV de FIRMS o falta algún CSV del histórico, muestra el error de esa fuente y no escribe ni mueve nada de ella. Da exactamente el mismo archivo que `actualizar_mes.php --csv`. Para probarlo sin compilar: `node tools/procesar_mes.mjs --nasa <carpeta> [--fuente <id>] [--datos <carpeta>]` (además acepta `--geojson` y `--config`).
 
 Compilarlo (en Windows, necesita `tools/raw/DEPTOS-PROV.geojson`; usa esbuild y postject con versión fija vía npx):
 

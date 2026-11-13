@@ -16,7 +16,7 @@ Formato: in1,focos,anomalia
 
 Origen de los archivos:
 - Datos de NASA FIRMS: tools/compute_anomalies.mjs --fuente <id> (historico)
-  y lib/actualizar_mes.php --fuente <id> o procesar_focos.exe --fuente <id>
+  y lib/actualizar_mes.php --fuente <id> o procesar_focos.exe (descarga en nasa/<id>/)
   (cada mes).
 - Datos de SEPA (solo MODIS): tools/convert_excel.mjs a partir de la planilla
   ESTADISTICAS-DEPARTAMENTALES, o el CSV del mes que deja SEPA.

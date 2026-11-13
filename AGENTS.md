@@ -19,7 +19,7 @@ node --test "tools/test/*.test.mjs"    # unit tests (a bare directory argument d
 php tools/test/series_test.php         # PHP tests for lib/series.php (plain PHP, exit code 0/1)
 php tools/test/actualizar_mes_test.php # PHP tests for the monthly cron script
 FIRMS_MAP_KEY=... php visor_deptos/lib/actualizar_mes.php --geojson tools/raw/DEPTOS-PROV.geojson [--fuente id] [--mes AAAAMM] [--csv file]  # monthly update (cron, PHP only)
-node tools/procesar_mes.mjs --nasa <folder> [--fuente id] [--datos <folder>]  # manual monthly update: FIRMS download in nasa/ -> datos/<fuente>/focos_AAAAMM.csv
+node tools/procesar_mes.mjs --nasa <folder> [--fuente id] [--datos <folder>]  # manual monthly update: FIRMS download -> datos/<fuente>/focos_AAAAMM.csv (a download covering the whole climatology rebuilds every month like compute_anomalies; the .exe processes each nasa/<fuente>/)
 node tools/build_exe.mjs                        # package procesar_mes.mjs as dist/procesar_focos.exe (Windows, Node SEA)
 SEPA_ROOT=../tools/sepa_local/ php -S localhost:8000 -t visor_deptos  # serve the viewer with stub SEPA includes (needs PHP 7.4+)
 ```

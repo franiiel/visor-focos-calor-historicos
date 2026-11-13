@@ -105,7 +105,7 @@ export function readFirms(text) {
 
 // ---------- Motor ----------
 
-function monthRange(from, to) {
+export function monthRange(from, to) {
   const months = [];
   for (let y = Number(from.slice(0, 4)), m = Number(from.slice(4)); `${y}${String(m).padStart(2, '0')}` <= to; m === 12 ? (y++, m = 1) : m++) {
     months.push(`${y}${String(m).padStart(2, '0')}`);
@@ -123,7 +123,12 @@ export function computeAnomalies({ archive, nrt, geojson, config }) {
   const lastArchive = maxDate(points);
   if (nrt) points.push(...readFirms(nrt).filter((p) => p.date > lastArchive));
   if (!points.length) throw new Error('FIRMS files have no points');
+  return buildHistory(points, geojson, config);
+}
 
+// Igual que computeAnomalies, pero con los puntos ya leídos (lo usa también procesar_mes.mjs). log, si
+// está, recibe el avance de la asignación cada 10 %.
+export function buildHistory(points, geojson, config, log = null) {
   const depts = prepareDepartments(geojson);
   const months = monthRange(
     points.reduce((a, p) => (p.date < a ? p.date : a), points[0].date).slice(0, 7).replace('-', ''),
@@ -131,7 +136,10 @@ export function computeAnomalies({ archive, nrt, geojson, config }) {
   );
   const series = new Map(depts.map(({ in1 }) => [in1, new Map(months.map((m) => [m, 0]))]));
   let dropped = 0;
-  for (const p of points) {
+  const step = Math.ceil(points.length / 10);
+  for (let i = 0; i < points.length; i++) {
+    if (log && (i + 1) % step === 0) log(`  asignando focos a departamentos: ${Math.round((100 * (i + 1)) / points.length)} %`);
+    const p = points[i];
     const in1 = findDepartment(depts, p.lon, p.lat);
     if (!in1) {
       dropped++;
