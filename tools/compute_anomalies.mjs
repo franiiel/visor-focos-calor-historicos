@@ -121,7 +121,8 @@ const cell = (v) => (v === null ? '' : String(v));
 export function computeAnomalies({ archive, nrt, geojson, config }) {
   const points = readFirms(archive);
   const lastArchive = maxDate(points);
-  if (nrt) points.push(...readFirms(nrt).filter((p) => p.date > lastArchive));
+  // Sin push(...array): con cientos de miles de focos supera el límite de argumentos.
+  if (nrt) for (const p of readFirms(nrt)) if (p.date > lastArchive) points.push(p);
   if (!points.length) throw new Error('FIRMS files have no points');
   return buildHistory(points, geojson, config);
 }
