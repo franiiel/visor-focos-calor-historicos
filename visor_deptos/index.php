@@ -7,6 +7,8 @@
 // para usar los stubs de tools/sepa_local/.
 $root = getenv('SEPA_ROOT') ?: '../../../../';
 $seccion = 'Productos';
+// Carpeta del visor, para el enlace a metodologia.pdf de la caja de producto.
+$base = '.';
 
 // Invalidación de caché: la versión cambia cada vez que cambia el archivo.
 function asset_version($file)
@@ -72,8 +74,26 @@ header('Content-Type: text/html; charset=utf-8');
         <div class="caja">
 
             <div class="cajaProductos">
-                <h2><a href="<?php echo $root; ?>productos/" class="seccion">Focos de calor</a><br>
-                Focos de calor por departamento</h2>
+
+                <h2><a href="<?php echo $root; ?>productos/" class="seccion">AgroENSO</a><br>
+                Efecto del ENSO
+                <br> (El Niño - Oscilación del Sur) sobre el rendimiento de cultivos</h2>
+                <p>Muestra cómo cambia el rendimiento de los principales cultivos de Argentina, Brasil y Uruguay según la fase ENSO (El Niño, Neutral o La Niña) de cada campaña. El rendimiento se corrige por la tendencia tecnológica y se compara entre fases en distintos niveles geográficos.
+
+                <br><br>
+                <span>
+                Fuentes: Estimaciones Agrícolas (MAGyP), Producción Agrícola Municipal (IBGE), DIEA-MGAP e índice ONI (NOAA CPC).
+                <br>
+                <br>Autores<br>
+                <a href="mailto:monzon.jp@gmail.com">Juan Pablo Monzon</a> — Investigador Independiente CONICET<br>
+                Con colaboración de <a href="mailto:mercau.jorge@inta.gob.ar">Jorge Luis Mercau</a> &amp; <a href="mailto:aramburumerlos.f@inta.gob.ar">Fernando Aramburu-Merlos</a> — Investigadores INTA<br>
+                <br>Se agradece el uso citando la fuente.</span>
+                <br>
+                <br><a href="<?php echo htmlspecialchars($base); ?>/metodologia.pdf" target="_blank">Metodología y términos de uso<span></span></a>
+
+                <br><br>
+                </p>
+
             </div>
 
             <div class="clearfix"></div>
