@@ -71,7 +71,8 @@ export function processMonth({ nasaDir, datosDir, geojson, config, log = () => {
   log(`  leyendo ${downloads.join(', ')}…`);
   const points = downloads.filter((f) => !isNrt(f)).flatMap(read);
   const lastArchive = points.reduce((a, p) => (p.date > a ? p.date : a), '');
-  for (const f of downloads.filter(isNrt)) points.push(...read(f).filter((p) => p.date > lastArchive));
+  // Sin push(...array): con cientos de miles de focos supera el límite de argumentos.
+  for (const f of downloads.filter(isNrt)) for (const p of read(f)) if (p.date > lastArchive) points.push(p);
   if (!points.length) throw new Error(`${downloads.join(', ')} no tiene focos`);
 
   const dates = points.map((p) => p.date).sort();

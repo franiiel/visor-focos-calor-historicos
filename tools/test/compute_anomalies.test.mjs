@@ -95,3 +95,10 @@ test('referenceStats adds the sample standard deviation (Excel STDEV)', () => {
   assert.equal(referenceStats([3]).std, null); // STDEV de un solo valor es #DIV/0!
   assert.equal(referenceStats([]), null);
 });
+
+test('computeAnomalies reads an NRT file with hundreds of thousands of points', () => {
+  const archive = csv(ARCHIVE_HEADER, ['0.5,0.5,300,2001-01-10,50,0']);
+  const nrt = NRT_HEADER + '\n' + '0.5,0.5,300,2001-02-10,50\n'.repeat(300000);
+  const { files } = computeAnomalies({ archive, nrt, geojson: GEO, config: CONFIG });
+  assert.match(files.find((f) => f.name === 'focos_200102.csv').content, /^06021,300000,/m);
+});

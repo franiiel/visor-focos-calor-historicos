@@ -222,3 +222,11 @@ test('errors leave both folders untouched', async (t) => {
     });
   });
 });
+
+test('reads an NRT download with hundreds of thousands of points', () => {
+  withFolders(({ datos, nasa, run }) => {
+    writeFileSync(join(nasa, 'fire_nrt_M-C61_1.csv'), HEADER + row(0.5, 0.5, '2003-01-10').repeat(300000));
+    assert.deepEqual(run(), { month: '200301', name: 'focos_200301.csv', assigned: 300000, outside: 0 });
+    assert.equal(readFileSync(join(datos, 'focos_200301.csv'), 'utf8'), 'in1,focos,anomalia\n06021,300000,5\n22007,0,1\n');
+  });
+});
