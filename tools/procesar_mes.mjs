@@ -57,7 +57,8 @@ function readReference(path, { from, to }) {
 const PROCESSED = 'procesados';
 
 // Procesa la descarga de FIRMS de nasaDir y escribe el mes en datosDir; la referencia se lee de
-// historyDir/referencia.csv (por defecto, la misma carpeta). Devuelve { month, name, assigned, outside }.
+// historyDir/referencia.csv (por defecto, la misma carpeta; null si no hay de dónde leerla, que solo es
+// válido para armar el histórico completo). Devuelve { month, name, assigned, outside }.
 // Valida todo antes de escribir: ante un error las carpetas quedan como estaban.
 export function processMonth({ nasaDir, datosDir, historyDir = datosDir, geojson, config, log = () => {} }) {
   if (!existsSync(nasaDir)) throw new Error(`No existe la carpeta ${nasaDir}: créela y copie ahí la descarga de NASA`);
@@ -108,6 +109,9 @@ export function processMonth({ nasaDir, datosDir, historyDir = datosDir, geojson
   const inside = months.find((m) => m >= from && m <= to);
   if (inside) {
     throw new Error(`${ym(inside)} está dentro del período de referencia (${from}–${to}): solo se procesan meses nuevos; para rehacer el histórico, use una descarga que cubra todo el período`);
+  }
+  if (!historyDir) {
+    throw new Error('No se encontró la carpeta visor_deptos junto al programa ni en la carpeta de arriba: de visor_deptos/datos/<fuente>/referencia.csv se lee la referencia');
   }
   const reference = readReference(join(historyDir, 'referencia.csv'), config.climatology);
 
@@ -181,10 +185,8 @@ function moveToProcessed(nasaDir) {
 // error de una fuente no impide procesar las demás.
 export function processSources({ root, geojson, configText, fuente = null, log = () => {} }) {
   // visor_deptos/ junto al programa o en la carpeta de arriba (p. ej. el .exe en dist/ dentro del repositorio).
+  // Solo hace falta para leer la referencia: el histórico completo se arma sin ella (ver processMonth).
   const visorDir = [join(root, 'visor_deptos'), join(dirname(root), 'visor_deptos')].find((d) => existsSync(d));
-  if (!visorDir) {
-    throw new Error(`No se encontró la carpeta visor_deptos junto al programa (${root}) ni en la carpeta de arriba: de visor_deptos/datos/<fuente>/referencia.csv se lee la referencia`);
-  }
   const nasaRoot = join(root, 'nasa');
   const entries = existsSync(nasaRoot) ? readdirSync(nasaRoot) : [];
   const ids = fuente ? [sourceConfig(configText, fuente).id] : JSON.parse(configText.replace(/^﻿/, '')).sources.map((s) => s.id);
@@ -194,9 +196,9 @@ export function processSources({ root, geojson, configText, fuente = null, log =
   return pending.map((id) => {
     const config = sourceConfig(configText, id);
     const datosDir = join(root, 'datos', id);
-    const historyDir = join(visorDir, 'datos', id);
+    const historyDir = visorDir ? join(visorDir, 'datos', id) : null;
     try {
-      log(`${id}: procesando ${nasaDirOf(id)} con la referencia de ${historyDir}`);
+      log(`${id}: procesando ${nasaDirOf(id)}${historyDir ? ` con la referencia de ${historyDir}` : ''}`);
       return { id, datosDir, ...processMonth({ nasaDir: nasaDirOf(id), datosDir, historyDir, geojson, config, log }) };
     } catch (err) {
       return { id, error: err.message };

@@ -180,8 +180,11 @@ test('processSources runs every source with a download in nasa/<id> and skips th
     mkdirSync(join(root, 'nasa', 'modis'), { recursive: true });
     mkdirSync(join(root, 'nasa', 'VIIRS'), { recursive: true });
     writeFileSync(join(root, 'nasa', 'VIIRS', 'fire_archive_x.csv'), HEADER + row(0.5, 0.5, '2003-01-10'));
-    // Sin visor_deptos/ junto al programa no hay dónde leer el histórico ni escribir el mes.
-    assert.throws(() => processSources({ root, geojson: GEO, configText }), /No se encontró la carpeta visor_deptos/);
+    // Sin visor_deptos/ no hay de dónde leer la referencia: error de esa fuente, sin escribir ni mover nada.
+    const [missing] = processSources({ root, geojson: GEO, configText });
+    assert.match(missing.error, /No se encontró la carpeta visor_deptos/);
+    assert.ok(!existsSync(join(root, 'datos')));
+    assert.deepEqual(readdirSync(join(root, 'nasa', 'VIIRS')), ['fire_archive_x.csv']);
     const viirsDatos = join(root, 'visor_deptos', 'datos', 'viirs');
     mkdirSync(viirsDatos, { recursive: true });
     writeFileSync(join(viirsDatos, 'referencia.csv'), REFERENCE);
@@ -214,6 +217,24 @@ test('processSources finds visor_deptos one level up (the .exe in dist/)', () =>
     assert.equal(readFileSync(join(root, 'datos', 'modis', 'focos_200301.csv'), 'utf8'), 'in1,focos,anomalia\n06021,1,1\n22007,0,1\n');
     assert.deepEqual(readdirSync(datos), ['referencia.csv']);
     assert.ok(!existsSync(join(root, 'visor_deptos')));
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('processSources rebuilds the whole history without a visor_deptos folder', () => {
+  const base = mkdtempSync(join(tmpdir(), 'procesar_rebuild_test_'));
+  try {
+    const root = join(base, 'pc');
+    const configText = JSON.stringify({ ...CONFIG, climatology: undefined, sources: [{ id: 'modis', climatology: CONFIG.climatology }] });
+    mkdirSync(join(root, 'nasa', 'modis'), { recursive: true });
+    const archive = HEADER + row(0.5, 0.5, '2001-01-03') + row(0.5, 1.1, '2002-12-09');
+    writeFileSync(join(root, 'nasa', 'modis', 'fire_archive_x.csv'), archive);
+    const [result] = processSources({ root, geojson: GEO, configText });
+    assert.equal(result.error, undefined);
+    assert.equal(result.files, 24);
+    const expected = computeAnomalies({ archive, nrt: null, geojson: GEO, config: CONFIG });
+    assert.equal(readFileSync(join(root, 'datos', 'modis', 'referencia.csv'), 'utf8'), expected.reference);
   } finally {
     rmSync(base, { recursive: true, force: true });
   }
