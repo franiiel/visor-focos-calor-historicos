@@ -139,6 +139,8 @@
 /* display solo en el estado abierto: un display de autor fijo pisaría el display: none del navegador y el menú
    quedaría siempre visible. .\:popover-open es la clase que usa el polyfill. */
 .visor-download-menu:is(:popover-open, .\:popover-open) { display: flex; flex-direction: column; }
+/* Sin soporte nativo nada oculta el menú cerrado mientras carga el polyfill (o si no carga): se oculta acá. */
+.visor-download-menu:not(:is(:popover-open, .\:popover-open)) { display: none; }
 .visor-download-menu button {
   padding: 0.4rem 0.75rem;
   border: 0;
