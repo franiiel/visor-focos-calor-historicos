@@ -77,13 +77,13 @@ FIRMS_MAP_KEY=xxxxxxxx
 
 - `FIRMS_MAP_KEY`: clave gratuita de <https://firms.modaps.eosdis.nasa.gov/api/map_key/>. Va solo en el entorno del cron, nunca en el repositorio.
 - Opciones: `--fuente <id>` (por defecto, la primera de `config.json`), `--mes AAAAMM` (por defecto, el mes anterior), `--source` (por defecto, `firmsSource` de la fuente: `MODIS_NRT` o `VIIRS_SNPP_NRT`; `MODIS_SP` o `VIIRS_SNPP_SP` para los datos definitivos), `--csv archivo.csv` (una descarga local de FIRMS en lugar de la API), `--config` y `--datos` (por defecto, `datos/<fuente>/`).
-- Aplica las mismas reglas que `tools/compute_anomalies.mjs` y toma las referencias de los CSV del período `climatology` de `datos/<fuente>/`. Por eso la serie histórica de esa fuente tiene que estar generada antes: si no hay ningún mes de ese período, termina con error y no escribe nada.
+- Aplica las mismas reglas que `tools/compute_anomalies.mjs` y clasifica el mes contra `datos/<fuente>/referencia.csv`: el máximo, el promedio y el mínimo de cada departamento y mes calendario en el período `climatology`. Esa referencia es fija y el mes nuevo no la modifica, así que `referencia.csv` tiene que estar generado antes (lo escribe `tools/compute_anomalies.mjs`). Si falta, está vacío o el mes cae dentro del período de referencia, termina con error y no escribe nada: los meses del período solo se rehacen regenerando el histórico completo.
 - Si algo falla (red, clave, respuesta que no es un CSV de FIRMS), termina con código 1, escribe el error en stderr y no deja ningún archivo. Si sale bien, escribe una línea con el mes, los focos asignados y los que quedaron fuera de todo departamento.
 - Solo corre desde la línea de comandos. Está en `lib/`, que no se sirve por web.
 
 ## Actualización mensual manual (`procesar_focos.exe`)
 
-Para una PC con Windows sin Node ni PHP. `procesar_focos.exe` va junto a las carpetas `nasa/` y `datos/`. El histórico lo lee de `visor_deptos/datos/<fuente>/`, que busca al lado del programa o una carpeta más arriba (por ejemplo, el `.exe` en `dist/` dentro del repositorio encuentra `../visor_deptos/`); `visor_deptos/` nunca se modifica:
+Para una PC con Windows sin Node ni PHP. `procesar_focos.exe` va junto a las carpetas `nasa/` y `datos/`. La referencia fija (máximo, promedio y mínimo de cada departamento y mes calendario en el período de referencia) la lee de `visor_deptos/datos/<fuente>/referencia.csv`, y busca `visor_deptos/` al lado del programa o una carpeta más arriba (por ejemplo, el `.exe` en `dist/` dentro del repositorio encuentra `../visor_deptos/`). `visor_deptos/` nunca se modifica, y el mes nuevo no cambia la referencia:
 
 ```
 procesar_focos.exe
@@ -93,7 +93,7 @@ nasa/
 datos/
   modis/  <- acá escribe el mes nuevo, lo que después se copia al visor
   viirs/  <- lo mismo para VIIRS S-NPP
-../visor_deptos/datos/modis/  <- de acá lee el histórico focos_AAAAMM.csv (para la anomalía), sin modificarlo
+../visor_deptos/datos/modis/referencia.csv  <- de acá lee la referencia (para la anomalía), sin modificarla
 ```
 
 1. Descargar de NASA FIRMS los focos de Argentina de los meses nuevos (uno o varios) en CSV (si viene en `.zip`, descomprimirlo).
@@ -103,7 +103,7 @@ datos/
 
 **Histórico completo.** Si la descarga cubre toda la climatología de la fuente (por ejemplo, el archive de VIIRS desde 2012 más el NRT), en lugar de un mes rearma todos los meses de la descarga y `referencia.csv` en `datos/<fuente>/`, igual que `tools/compute_anomalies.mjs`. Sirve para armar el histórico la primera vez, que después se copia a `visor_deptos/datos/<fuente>/`. El último mes de la descarga puede estar incompleto: conviene volver a procesarlo cuando termine.
 
-Si la descarga trae varios meses, escribe uno por mes, igual que si se procesaran de a uno en orden; un mes sin focos en el medio sale con ceros. Muestra la fecha del primer y del último foco, y avisa (sin dejar de procesarlo) si el primer mes empieza después del día 1 o el último termina antes de fin de mes, porque puede estar incompleto: por ejemplo, el mes en curso. Si no encuentra `visor_deptos/` junto al programa ni una carpeta más arriba, no es un CSV de FIRMS, falta algún CSV del histórico o no hay ningún mes del período de referencia en `visor_deptos/datos/<fuente>/` (`referencia.csv` solo no alcanza), muestra el error de esa fuente y no escribe ni mueve nada de ella. Da exactamente el mismo archivo que `actualizar_mes.php --csv`. Para probarlo sin compilar: `node tools/procesar_mes.mjs --nasa <carpeta> [--fuente <id>] [--datos <carpeta>]` (además acepta `--geojson` y `--config`).
+Si la descarga trae varios meses, escribe uno por mes, igual que si se procesaran de a uno en orden; un mes sin focos en el medio sale con ceros. Muestra la fecha del primer y del último foco, y avisa (sin dejar de procesarlo) si el primer mes empieza después del día 1 o el último termina antes de fin de mes, porque puede estar incompleto: por ejemplo, el mes en curso. Si no encuentra `visor_deptos/` junto al programa ni una carpeta más arriba, no es un CSV de FIRMS, falta `referencia.csv` (o está vacío) o algún mes de la descarga cae dentro del período de referencia (la referencia es fija: esos meses solo se rehacen con el histórico completo), muestra el error de esa fuente y no escribe ni mueve nada de ella. Da exactamente el mismo archivo que `actualizar_mes.php --csv`. Para probarlo sin compilar: `node tools/procesar_mes.mjs --nasa <carpeta> [--fuente <id>] [--datos <carpeta>]` (además acepta `--geojson` y `--config`).
 
 Compilarlo (en Windows, necesita `tools/raw/DEPTOS-PROV.geojson`; usa esbuild y postject con versión fija vía npx):
 

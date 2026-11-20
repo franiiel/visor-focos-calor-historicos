@@ -9,9 +9,9 @@
 //
 // Uso:
 //   procesar_focos.exe [--fuente viirs]   (procesa cada nasa/<fuente>/ con descargas nuevas -> datos/<fuente>/,
-//                                          ambas junto al ejecutable, con el histórico de
-//                                          visor_deptos/datos/<fuente>/, al lado o un nivel arriba; con
-//                                          --fuente, solo esa)
+//                                          ambas junto al ejecutable, con la referencia fija de
+//                                          visor_deptos/datos/<fuente>/referencia.csv, al lado o un nivel
+//                                          arriba; con --fuente, solo esa)
 //   node tools/procesar_mes.mjs --nasa <carpeta> [--fuente modis] [--datos visor_deptos/datos/<fuente>]
 //        [--geojson tools/raw/DEPTOS-PROV.geojson] [--config visor_deptos/config.json]
 //
@@ -32,30 +32,33 @@ import { fileURLToPath } from 'node:url';
 import { buildHistory, findDepartment, monthRange, prepareDepartments, readFirms } from './compute_anomalies.mjs';
 import { anomalyClass, sourceConfig } from './convert_excel.mjs';
 
-// [in1, valor] de un CSV mensual, con la misma lectura que series_parse_csv de lib/series.php.
-function readMonthValues(text, name, config) {
-  const lines = text.replace(/^﻿/, '').split(/\r?\n/);
+// referencia.csv (in1,mes,max,promedio,min,…, como la escribe compute_anomalies.mjs) como
+// Map<'in1-MM', { max, mean, min }>. Es la referencia fija del período de climatología: el mes nuevo se
+// clasifica contra ella y no la modifica. Las filas sin valores (sin datos en el período) se omiten.
+function readReference(path, { from, to }) {
+  if (!existsSync(path)) {
+    throw new Error(`No está ${path}: hace falta para calcular la anomalía (máximo, promedio y mínimo de ${from}–${to})`);
+  }
+  const lines = readFileSync(path, 'utf8').replace(/^﻿/, '').split(/\r?\n/);
   const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
-  const [iIn1, iValue, iAnom] = ['in1', config.columns.value, config.columns.anomaly].map((c) => header.indexOf(c));
-  if (iIn1 < 0 || iValue < 0 || iAnom < 0) {
-    throw new Error(`${name} no tiene las columnas in1,${config.columns.value},${config.columns.anomaly}`);
-  }
-  const values = [];
+  const cols = ['in1', 'mes', 'max', 'promedio', 'min'].map((c) => header.indexOf(c));
+  if (cols.some((i) => i < 0)) throw new Error(`${path} no tiene las columnas in1,mes,max,promedio,min`);
+  const reference = new Map();
   for (const line of lines.slice(1)) {
-    const c = line.split(',');
-    const in1 = (c[iIn1] ?? '').trim();
-    const text = (c[iValue] ?? '').trim();
-    if (!/^\d{5}$/.test(in1) || text === '' || !Number.isFinite(Number(text))) continue;
-    values.push([in1, config.integerValues ? Math.round(Number(text)) : Number(text)]);
+    const [in1, mes, ...stats] = cols.map((i) => (line.split(',')[i] ?? '').trim());
+    if (!/^\d{5}$/.test(in1) || !/^\d{2}$/.test(mes) || stats.some((s) => s === '' || !Number.isFinite(Number(s)))) continue;
+    const [max, mean, min] = stats.map(Number);
+    reference.set(`${in1}-${mes}`, { max, mean, min });
   }
-  return values;
+  if (!reference.size) throw new Error(`${path} no tiene ninguna fila con referencia`);
+  return reference;
 }
 
 const PROCESSED = 'procesados';
 
-// Procesa la descarga de FIRMS de nasaDir y escribe el mes en datosDir; el histórico para la referencia se
-// lee de historyDir (por defecto, la misma carpeta). Devuelve { month, name, assigned, outside }. Valida
-// todo antes de escribir: ante un error las carpetas quedan como estaban.
+// Procesa la descarga de FIRMS de nasaDir y escribe el mes en datosDir; la referencia se lee de
+// historyDir/referencia.csv (por defecto, la misma carpeta). Devuelve { month, name, assigned, outside }.
+// Valida todo antes de escribir: ante un error las carpetas quedan como estaban.
 export function processMonth({ nasaDir, datosDir, historyDir = datosDir, geojson, config, log = () => {} }) {
   if (!existsSync(nasaDir)) throw new Error(`No existe la carpeta ${nasaDir}: créela y copie ahí la descarga de NASA`);
   const downloads = readdirSync(nasaDir, { recursive: true })
@@ -96,10 +99,17 @@ export function processMonth({ nasaDir, datosDir, historyDir = datosDir, geojson
       month: `${first} a ${last}`,
       name: `${files[0].name} … ${files.at(-1).name}`,
       files: files.length,
+      rebuilt: true,
       assigned: points.length - dropped,
       outside: dropped,
     };
   }
+  // La referencia es fija: un mes del período de climatología solo se rehace con el histórico completo.
+  const inside = months.find((m) => m >= from && m <= to);
+  if (inside) {
+    throw new Error(`${ym(inside)} está dentro del período de referencia (${from}–${to}): solo se procesan meses nuevos; para rehacer el histórico, use una descarga que cubra todo el período`);
+  }
+  const reference = readReference(join(historyDir, 'referencia.csv'), config.climatology);
 
   // FIRMS solo trae los días con focos: un mes que empieza después del día 1 o termina antes del último
   // día puede estar incompleto (o ser el mes en curso). Se procesa igual, pero se avisa.
@@ -125,41 +135,11 @@ export function processMonth({ nasaDir, datosDir, historyDir = datosDir, geojson
     byDept.set(in1, byDept.get(in1) + 1);
   }
 
-  // Valores de cada mes de datos/ que puede entrar en una referencia; los meses ya calculados de esta
-  // descarga reemplazan a su archivo previo, como si se hubieran procesado uno por uno en orden.
-  const known = new Map();
-  const monthly = new RegExp(`^${config.filePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_(\\d{6})\\.csv$`);
-  for (const f of (existsSync(historyDir) ? readdirSync(historyDir) : []).sort()) {
-    const m = f.match(monthly)?.[1];
-    if (!m || m < from || m > to || months.includes(m)) continue;
-    known.set(m, readMonthValues(readFileSync(join(historyDir, f), 'utf8'), f, config));
-  }
-  // Sin ningún mes del histórico, todas las clases saldrían vacías y el mes se vería sin anomalía en el visor.
-  // referencia.csv no alcanza: la referencia se arma con los CSV mensuales.
-  if (!known.size) {
-    throw new Error(`No hay histórico en ${historyDir}: faltan los ${config.filePrefix}_AAAAMM.csv de ${from}–${to}, necesarios para calcular la anomalía`);
-  }
-
   const files = months.map((month) => {
-    // Referencia: el mismo mes calendario dentro de la climatología, sin el archivo previo de este mes;
-    // si el mes cae dentro de la climatología, entran sus conteos nuevos.
-    const reference = new Map();
-    const add = (in1, v) => reference.set(in1, [...(reference.get(in1) ?? []), v]);
-    for (const m of [...known.keys()].sort()) {
-      if (m !== month && m.slice(4) === month.slice(4)) for (const [in1, v] of known.get(m)) add(in1, v);
-    }
-    const monthCounts = counts.get(month);
-    if (month >= from && month <= to) {
-      for (const [in1, n] of monthCounts) add(in1, n);
-      known.set(month, [...monthCounts]);
-    }
     const rows = [`in1,${config.columns.value},${config.columns.anomaly}`];
-    for (const [in1, n] of monthCounts) {
-      const values = reference.get(in1);
-      const cls = values
-        ? anomalyClass(n, { max: Math.max(...values), mean: values.reduce((a, b) => a + b, 0) / values.length, min: Math.min(...values) })
-        : '';
-      rows.push(`${in1},${n},${cls}`);
+    for (const [in1, n] of counts.get(month)) {
+      const stats = reference.get(`${in1}-${month.slice(4)}`);
+      rows.push(`${in1},${n},${stats ? anomalyClass(n, stats) : ''}`);
     }
     return { name: `${config.filePrefix}_${month}.csv`, content: rows.join('\n') + '\n' };
   });
@@ -195,15 +175,15 @@ function moveToProcessed(nasaDir) {
 }
 
 // Lo que corre el .exe: procesa cada fuente de config.json que tiene una descarga nueva en
-// <root>/nasa/<id>/ (sin distinguir mayúsculas). Lee el histórico de visor_deptos/datos/<id>/ (junto a
-// root o un nivel arriba) y escribe el mes solo en <root>/datos/<id>/: visor_deptos/ nunca se modifica.
+// <root>/nasa/<id>/ (sin distinguir mayúsculas). Lee la referencia de visor_deptos/datos/<id>/referencia.csv
+// (junto a root o un nivel arriba) y escribe el mes solo en <root>/datos/<id>/: visor_deptos/ nunca se modifica.
 // Con fuente, solo esa. Devuelve [{ id, datosDir, ...resultado de processMonth } | { id, error }]: el
 // error de una fuente no impide procesar las demás.
 export function processSources({ root, geojson, configText, fuente = null, log = () => {} }) {
   // visor_deptos/ junto al programa o en la carpeta de arriba (p. ej. el .exe en dist/ dentro del repositorio).
   const visorDir = [join(root, 'visor_deptos'), join(dirname(root), 'visor_deptos')].find((d) => existsSync(d));
   if (!visorDir) {
-    throw new Error(`No se encontró la carpeta visor_deptos junto al programa (${root}) ni en la carpeta de arriba: de visor_deptos/datos/<fuente>/ se lee el histórico`);
+    throw new Error(`No se encontró la carpeta visor_deptos junto al programa (${root}) ni en la carpeta de arriba: de visor_deptos/datos/<fuente>/referencia.csv se lee la referencia`);
   }
   const nasaRoot = join(root, 'nasa');
   const entries = existsSync(nasaRoot) ? readdirSync(nasaRoot) : [];
@@ -216,7 +196,7 @@ export function processSources({ root, geojson, configText, fuente = null, log =
     const datosDir = join(root, 'datos', id);
     const historyDir = join(visorDir, 'datos', id);
     try {
-      log(`${id}: procesando ${nasaDirOf(id)} con el histórico de ${historyDir}`);
+      log(`${id}: procesando ${nasaDirOf(id)} con la referencia de ${historyDir}`);
       return { id, datosDir, ...processMonth({ nasaDir: nasaDirOf(id), datosDir, historyDir, geojson, config, log }) };
     } catch (err) {
       return { id, error: err.message };
@@ -282,13 +262,13 @@ function main() {
 if (sea.isSea() || (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))) {
   let code = 0;
   try {
-    for (const { id, error, month, name, files, assigned, outside, datosDir } of main()) {
+    for (const { id, error, month, name, files, rebuilt, assigned, outside, datosDir } of main()) {
       if (error) {
         console.error(`${id}: Error: ${error}`);
         code = 1;
         continue;
       }
-      const where = files ? `${files} meses y referencia.csv en ${datosDir} (${name})` : join(datosDir, name);
+      const where = files ? `${files} meses${rebuilt ? ' y referencia.csv' : ''} en ${datosDir} (${name})` : join(datosDir, name);
       console.log(`${id} ${month}: ${assigned} focos asignados, ${outside} fuera de todo departamento -> ${where}`);
       console.log(`${id}: la descarga de NASA se movió a procesados/.`);
     }

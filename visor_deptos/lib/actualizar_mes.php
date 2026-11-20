@@ -169,12 +169,56 @@ function monthly_download($month, $source, $key)
 // ---------- Archivo mensual ----------
 
 /**
- * Cuenta $points por departamento y clasifica el mes. La referencia usa el mismo
- * mes calendario de la climatología a partir de los CSV de $dataDir, salvo el propio archivo de $month:
- * en su lugar se usan sus conteos nuevos cuando está dentro de la climatología.
- * Devuelve [texto csv, asignados, fuera].
+ * referencia.csv de $dataDir (in1,mes,max,promedio,min,…, como la escribe tools/compute_anomalies.mjs) como
+ * [in1 => [MM => [max, mean, min]]]. Es la referencia fija del período de climatología: el mes nuevo se
+ * clasifica contra ella y no la modifica. Las filas sin valores se omiten. Misma lectura que readReference
+ * de tools/procesar_mes.mjs.
  */
-function monthly_build($points, $month, $depts, $dataDir, $config)
+function monthly_reference($dataDir, $config)
+{
+    $path = "$dataDir/referencia.csv";
+    $period = $config['climatology']['from'] . '-' . $config['climatology']['to'];
+    $fh = is_file($path) ? @fopen($path, 'r') : false;
+    if ($fh === false) {
+        throw new RuntimeException("Missing $path: it is needed to classify the month (max, mean and min of $period)");
+    }
+    $header = fgetcsv($fh, 0, ",", "\"", "");
+    $header = is_array($header) ? array_map(function ($h) {
+        return strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $h)));
+    }, $header) : [];
+    $cols = [];
+    foreach (['in1', 'mes', 'max', 'promedio', 'min'] as $name) {
+        $cols[] = array_search($name, $header, true);
+    }
+    if (in_array(false, $cols, true)) {
+        fclose($fh);
+        throw new RuntimeException("$path has no columns in1,mes,max,promedio,min");
+    }
+    $reference = [];
+    while (($cells = fgetcsv($fh, 0, ",", "\"", "")) !== false) {
+        $values = [];
+        foreach ($cols as $i) {
+            $values[] = trim((string) ($cells[$i] ?? ''));
+        }
+        list($in1, $mes, $max, $mean, $min) = $values;
+        if (!preg_match('/^\d{5}\z/', $in1) || !preg_match('/^\d{2}\z/', $mes)
+            || !is_numeric($max) || !is_numeric($mean) || !is_numeric($min)) {
+            continue;
+        }
+        $reference[$in1][$mes] = [(float) $max, (float) $mean, (float) $min];
+    }
+    fclose($fh);
+    if (!$reference) {
+        throw new RuntimeException("$path has no reference rows");
+    }
+    return $reference;
+}
+
+/**
+ * Cuenta $points por departamento y clasifica el mes contra $reference (ver monthly_reference) en el
+ * mismo mes calendario. Devuelve [texto csv, asignados, fuera].
+ */
+function monthly_build($points, $month, $depts, $reference, $config)
 {
     $counts = [];
     foreach ($depts as list($in1)) {
@@ -190,40 +234,12 @@ function monthly_build($points, $month, $depts, $dataDir, $config)
         }
     }
 
-    $from = $config['climatology']['from'];
-    $to = $config['climatology']['to'];
-    $reference = [];
-    $files = series_list_csv($dataDir, $config['filePrefix']);
-    // Sin ningún mes del histórico, todas las clases saldrían vacías y el mes se vería sin anomalía en el visor
-    // (misma regla que tools/procesar_mes.mjs).
-    $history = array_filter(array_column($files, 0), function ($m) use ($month, $from, $to) {
-        return $m !== $month && $m >= $from && $m <= $to;
-    });
-    if (!$history) {
-        throw new RuntimeException("No history in $dataDir: the {$config['filePrefix']}_AAAAMM.csv files of $from-$to are needed to classify the month");
-    }
-    foreach ($files as list($m, $path)) {
-        if ($m === $month || substr($m, 4) !== substr($month, 4) || $m < $from || $m > $to) {
-            continue;
-        }
-        foreach (series_parse_csv($path, $config) as $in1 => list($value)) {
-            if ($value !== null) {
-                $reference[$in1][] = $value;
-            }
-        }
-    }
-    if ($month >= $from && $month <= $to) {
-        foreach ($counts as $in1 => $n) {
-            $reference[$in1][] = $n;
-        }
-    }
-
+    $mm = substr($month, 4, 2);
     $rows = ['in1,' . $config['columns']['value'] . ',' . $config['columns']['anomaly']];
     foreach ($counts as $in1 => $n) {
-        $values = $reference[(string) $in1] ?? [];
-        $class = $values
-            ? monthly_anomaly_class($n, ['max' => max($values), 'mean' => array_sum($values) / count($values), 'min' => min($values)])
-            : '';
+        // Los códigos sin cero inicial quedan como claves enteras en los arreglos de PHP.
+        $stats = $reference[str_pad((string) $in1, 5, '0', STR_PAD_LEFT)][$mm] ?? null;
+        $class = $stats ? monthly_anomaly_class($n, ['max' => $stats[0], 'mean' => $stats[1], 'min' => $stats[2]]) : '';
         $rows[] = "$in1,$n,$class";
     }
     return [implode("\n", $rows) . "\n", count($points) - $outside, $outside];
@@ -271,6 +287,12 @@ function monthly_main($argv)
         }
         $opts['source'] = $opts['source'] ?? $config['firmsSource'];
         $opts['datos'] = $opts['datos'] ?? __DIR__ . '/../datos/' . $config['id'];
+        // Antes de descargar: la referencia es fija, así que un mes de la climatología no se procesa.
+        if ($month >= $config['climatology']['from'] && $month <= $config['climatology']['to']) {
+            throw new RuntimeException("$month is inside the reference period ({$config['climatology']['from']}-{$config['climatology']['to']}): "
+                . 'only new months are processed; rebuild the history with tools/compute_anomalies.mjs');
+        }
+        $reference = monthly_reference($opts['datos'], $config);
         if ($opts['csv'] !== null) {
             $text = @file_get_contents($opts['csv']);
             if ($text === false) {
@@ -292,7 +314,7 @@ function monthly_main($argv)
         if (!is_array($geojson) || !isset($geojson['features'])) {
             throw new RuntimeException("Cannot read {$opts['geojson']} as GeoJSON");
         }
-        list($csv, $assigned, $outside) = monthly_build($points, $month, monthly_departments($geojson), $opts['datos'], $config);
+        list($csv, $assigned, $outside) = monthly_build($points, $month, monthly_departments($geojson), $reference, $config);
 
         $name = "{$config['filePrefix']}_$month.csv";
         $tmp = "{$opts['datos']}/$name.tmp";
