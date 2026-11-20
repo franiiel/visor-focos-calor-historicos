@@ -47,7 +47,7 @@ header('Content-Type: text/html; charset=utf-8');
         <meta name="viewport" content="width=device-width">
         <meta property="og:image" content="<?php echo $root; ?>img/thumb.png">
         <link rel="shortcut icon" href="<?php echo $root; ?>favicon.ico">
-        <link href='http://fonts.googleapis.com/css?family=Roboto:700|Roboto+Condensed:400,700' rel='stylesheet' type='text/css'>
+        <link href='https://fonts.googleapis.com/css?family=Roboto:700|Roboto+Condensed:400,700' rel='stylesheet' type='text/css'>
         <link rel="stylesheet" href="<?php echo $root; ?>css/normalize.min.css">
         <link rel="stylesheet" href="<?php echo $root; ?>css/main.css">
         <link rel="stylesheet" href="<?php echo $root; ?>css/extras.css">

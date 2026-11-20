@@ -7,7 +7,8 @@
 require __DIR__ . '/lib/config.php';
 require __DIR__ . '/lib/series.php';
 
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
+header('X-Content-Type-Options: nosniff');
 try {
     $config = visor_config(__DIR__ . '/config.json');
 } catch (VisorConfigException $e) {
