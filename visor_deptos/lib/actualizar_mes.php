@@ -183,8 +183,9 @@ function monthly_reference($dataDir, $config)
         throw new RuntimeException("Missing $path: it is needed to classify the month (max, mean and min of $period)");
     }
     $header = fgetcsv($fh, 0, ",", "\"", "");
+    // Con BOM delante de una celda entre comillas, fgetcsv deja las comillas: se quitan junto con el BOM.
     $header = is_array($header) ? array_map(function ($h) {
-        return strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $h)));
+        return strtolower(trim(trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $h)), '"'));
     }, $header) : [];
     $cols = [];
     foreach (['in1', 'mes', 'max', 'promedio', 'min'] as $name) {

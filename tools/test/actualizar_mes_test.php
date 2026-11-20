@@ -121,6 +121,17 @@ list($code, , $err) = run_cli(array_merge($base, ['--mes', '200201', '--csv', "$
 check('month inside the climatology: exit 1 and nothing written',
     $code === 1 && scandir("$dir/datos") === $before && strpos($err, 'inside the reference period (200101-200212)') !== false);
 
+// Una referencia.csv guardada por Excel («CSV UTF-8»: BOM, comillas, CRLF) da las mismas clases (como procesar_mes.mjs).
+$quotedLines = [];
+foreach (explode("\n", trim($reference)) as $line) {
+    $quotedLines[] = '"' . str_replace(',', '","', $line) . '"';
+}
+file_put_contents("$dir/datos/referencia.csv", "\xEF\xBB\xBF" . implode("\r\n", $quotedLines) . "\r\n");
+@unlink("$dir/datos/focos_200301.csv");
+list($code) = run_cli(array_merge($base, ['--mes', '200301', '--csv', "$dir/focos.csv"]));
+check('referencia.csv with BOM and quoted cells', $code === 0 && @file_get_contents("$dir/datos/focos_200301.csv") === "in1,focos,anomalia\n06021,5,5\n22007,0,1\n");
+file_put_contents("$dir/datos/referencia.csv", $reference);
+
 // Sin referencia.csv utilizable no escribe nada, aunque estén los CSV mensuales.
 $refCases = [
     'missing referencia.csv' => [null, 'Missing'],

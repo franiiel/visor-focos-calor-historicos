@@ -97,7 +97,8 @@ test('a month inside the climatology is refused: the reference is fixed', () => 
 
 test('a referencia.csv re-saved with quoted cells gives the same classes (like fgetcsv in PHP)', () => {
   withFolders(({ datos, nasa, run }) => {
-    const quoted = REFERENCE.trim().split('\n').map((l) => l.split(',').map((c) => `"${c}"`).join(',')).join('\r\n') + '\r\n';
+    // Como lo guarda Excel en «CSV UTF-8»: BOM, comillas y fin de línea CRLF.
+    const quoted = '﻿' + REFERENCE.trim().split('\n').map((l) => l.split(',').map((c) => `"${c}"`).join(',')).join('\r\n') + '\r\n';
     writeFileSync(join(datos, 'referencia.csv'), quoted);
     writeFileSync(join(nasa, 'descarga.csv'), HEADER + row(0.5, 0.5, '2003-01-10').repeat(5));
     run();
