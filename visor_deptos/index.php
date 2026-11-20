@@ -34,19 +34,17 @@ function h($text)
 header('Content-Type: text/html; charset=utf-8');
 ?>
 <!DOCTYPE html>
-<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7"> <![endif]-->
-<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8"> <![endif]-->
-<!--[if IE 8]>         <html class="no-js lt-ie9"> <![endif]-->
-<!--[if gt IE 8]><!--> <html class="no-js"> <!--<![endif]-->
+<html class="no-js" lang="es">
     <head>
         <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
         <title>SEPA | <?php echo h($config['title']); ?></title>
         <meta name="description" content="<?php echo h($config['title']); ?>: mapa interactivo mensual por departamento">
         <?php include($root . 'includes/keywords.php'); ?>
-        <meta name="viewport" content="width=device-width">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta property="og:image" content="<?php echo $root; ?>img/thumb.png">
         <link rel="shortcut icon" href="<?php echo $root; ?>favicon.ico">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href='https://fonts.googleapis.com/css?family=Roboto:700|Roboto+Condensed:400,700' rel='stylesheet' type='text/css'>
         <link rel="stylesheet" href="<?php echo $root; ?>css/normalize.min.css">
         <link rel="stylesheet" href="<?php echo $root; ?>css/main.css">
@@ -133,15 +131,14 @@ header('Content-Type: text/html; charset=utf-8');
       <div class="visor-panel-head">
         <h2 id="panel-title">Distribución histórica mensual — Argentina</h2>
         <div class="visor-panel-actions">
-          <details class="visor-download">
-            <summary class="visor-icon-btn" aria-label="Descargar" title="Descargar">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
-            </summary>
-            <div class="visor-download-menu">
-              <button type="button" id="chart-csv">Datos (CSV)</button>
-              <button type="button" id="chart-png">Imagen (PNG)</button>
-            </div>
-          </details>
+          <button type="button" class="visor-icon-btn" popovertarget="chart-download"
+                  aria-label="Descargar" title="Descargar">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+          </button>
+          <div class="visor-download-menu" id="chart-download" popover>
+            <button type="button" id="chart-csv">Datos (CSV)</button>
+            <button type="button" id="chart-png">Imagen (PNG)</button>
+          </div>
           <button type="button" class="visor-icon-btn" id="chart-expand" aria-pressed="false"
                   aria-label="Ampliar gráfico" title="Ampliar gráfico">
             <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
@@ -160,15 +157,14 @@ header('Content-Type: text/html; charset=utf-8');
     <div class="visor-panel-head">
       <h2 id="years-title">Distribución mensual por año seleccionado — Argentina</h2>
       <div class="visor-panel-actions">
-        <details class="visor-download">
-          <summary class="visor-icon-btn" aria-label="Descargar" title="Descargar">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
-          </summary>
-          <div class="visor-download-menu">
-            <button type="button" id="years-csv">Datos (CSV)</button>
-            <button type="button" id="years-png">Imagen (PNG)</button>
-          </div>
-        </details>
+        <button type="button" class="visor-icon-btn" popovertarget="years-download"
+                aria-label="Descargar" title="Descargar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+        </button>
+        <div class="visor-download-menu" id="years-download" popover>
+          <button type="button" id="years-csv">Datos (CSV)</button>
+          <button type="button" id="years-png">Imagen (PNG)</button>
+        </div>
         <button type="button" class="visor-icon-btn" id="years-expand" aria-pressed="false"
                 aria-label="Ampliar gráfico" title="Ampliar gráfico">
           <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
@@ -205,6 +201,16 @@ echo json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
         integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
         crossorigin="anonymous"></script>
+<script>
+// Los menús de descarga usan popover (Baseline desde 2025): el polyfill se carga solo en navegadores sin soporte.
+if (!Object.prototype.hasOwnProperty.call(HTMLElement.prototype, 'popover')) {
+  var popoverPolyfill = document.createElement('script');
+  popoverPolyfill.src = 'https://cdn.jsdelivr.net/npm/@oddbird/popover-polyfill@0.7.3/dist/popover.iife.min.js';
+  popoverPolyfill.integrity = 'sha384-INwTyeGJ4Bk/YHI/urvNEearyioRlcY0f49uACR8MxYAtulvd/xSYR4b3746TPPL';
+  popoverPolyfill.crossOrigin = 'anonymous';
+  document.head.appendChild(popoverPolyfill);
+}
+</script>
 <script type="module" src="app.js?v=<?php echo asset_version('app.js'); ?>"></script>
 
             <div class="clearfix"></div>

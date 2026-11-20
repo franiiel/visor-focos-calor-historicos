@@ -406,19 +406,38 @@ async function selectDepartment(props) {
   renderChart();
 }
 
+// Mientras está ampliado, el panel vive dentro de un <dialog> modal: el navegador retiene el foco, cierra con
+// Escape y bloquea la página de atrás. Un marcador guarda su lugar en la grilla para devolverlo al cerrar.
 function setupChartExpand(btnId, panelId) {
   const btn = $(btnId);
   const panel = $(panelId);
-  const setExpanded = (on) => {
-    panel.classList.toggle('is-expanded', on);
+  const dialog = document.createElement('dialog');
+  dialog.className = 'visor-expand';
+  dialog.setAttribute('aria-labelledby', panel.querySelector('h2').id);
+  $('visor').append(dialog);
+  const placeholder = document.createComment('');
+  const setButton = (on) => {
     btn.setAttribute('aria-pressed', String(on));
     const label = on ? 'Reducir gráfico' : 'Ampliar gráfico';
     btn.setAttribute('aria-label', label);
     btn.title = label;
   };
-  btn.addEventListener('click', () => setExpanded(!panel.classList.contains('is-expanded')));
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') setExpanded(false);
+  btn.addEventListener('click', () => {
+    if (dialog.open) {
+      dialog.close();
+      return;
+    }
+    panel.before(placeholder);
+    dialog.append(panel);
+    panel.classList.add('is-expanded');
+    setButton(true);
+    dialog.showModal();
+  });
+  dialog.addEventListener('close', () => {
+    placeholder.replaceWith(panel);
+    panel.classList.remove('is-expanded');
+    setButton(false);
+    btn.focus();
   });
 }
 
@@ -470,14 +489,29 @@ function setupDownloads() {
   $('years-png').addEventListener('click', () => {
     if (state.series && state.yearsChart) downloadPng(state.yearsChart, `${downloadName('comparacion')}.png`);
   });
-  // <details> no se cierra solo: se cierra al elegir una opción, al hacer clic afuera o con Escape.
-  const menus = [...document.querySelectorAll('.visor-download')];
-  document.addEventListener('click', (e) => {
-    for (const d of menus) if (!d.contains(e.target) || e.target.closest('.visor-download-menu')) d.open = false;
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') for (const d of menus) d.open = false;
-  });
+  // El popover ya se cierra con un clic afuera y con Escape; falta cerrarlo al elegir una opción.
+  // Está en la capa superior, fuera del flujo: se ubica debajo del botón al abrirse y se cierra si la página
+  // se desplaza o cambia de tamaño, para que no quede separado del botón.
+  for (const menu of document.querySelectorAll('.visor-download-menu')) {
+    const trigger = document.querySelector(`[popovertarget="${menu.id}"]`);
+    menu.addEventListener('click', (e) => {
+      if (e.target.closest('button')) menu.hidePopover();
+    });
+    // beforetoggle, no toggle: toggle llega después de mostrarse y el menú aparecería un instante fuera de lugar.
+    menu.addEventListener('beforetoggle', (e) => {
+      if (e.newState !== 'open') return;
+      const rect = trigger.getBoundingClientRect();
+      menu.style.top = `${rect.bottom + 4}px`;
+      menu.style.right = `${document.documentElement.clientWidth - rect.right}px`;
+    });
+  }
+  const closeMenus = () => {
+    for (const menu of document.querySelectorAll('.visor-download-menu')) {
+      if (menu.matches(':is(:popover-open, .\\:popover-open)')) menu.hidePopover();
+    }
+  };
+  window.addEventListener('scroll', closeMenus, { passive: true });
+  window.addEventListener('resize', closeMenus);
 }
 
 function chartLabels(months) {
