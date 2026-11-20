@@ -95,6 +95,16 @@ test('a month inside the climatology is refused: the reference is fixed', () => 
   });
 });
 
+test('a referencia.csv re-saved with quoted cells gives the same classes (like fgetcsv in PHP)', () => {
+  withFolders(({ datos, nasa, run }) => {
+    const quoted = REFERENCE.trim().split('\n').map((l) => l.split(',').map((c) => `"${c}"`).join(',')).join('\r\n') + '\r\n';
+    writeFileSync(join(datos, 'referencia.csv'), quoted);
+    writeFileSync(join(nasa, 'descarga.csv'), HEADER + row(0.5, 0.5, '2003-01-10').repeat(5));
+    run();
+    assert.equal(readFileSync(join(datos, 'focos_200301.csv'), 'utf8'), 'in1,focos,anomalia\n06021,5,5\n22007,0,1\n');
+  });
+});
+
 test('NRT points count only after the last archive day', () => {
   withFolders(({ datos, nasa, run }) => {
     writeFileSync(join(nasa, 'fire_archive_x.csv'), HEADER + row(0.5, 0.5, '2003-01-10'));

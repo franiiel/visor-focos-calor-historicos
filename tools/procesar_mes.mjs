@@ -40,12 +40,16 @@ function readReference(path, { from, to }) {
     throw new Error(`No está ${path}: hace falta para calcular la anomalía (máximo, promedio y mínimo de ${from}–${to})`);
   }
   const lines = readFileSync(path, 'utf8').replace(/^﻿/, '').split(/\r?\n/);
-  const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
+  // Una planilla puede volver a guardarlo con comillas en cada celda: se quitan, como hace fgetcsv en el cron PHP.
+  // ponytail: no admite comas dentro de una celda; referencia.csv solo tiene códigos y números.
+  const cells = (line) => line.split(',').map((c) => c.trim().replace(/^"(.*)"$/, '$1').trim());
+  const header = cells(lines[0]).map((h) => h.toLowerCase());
   const cols = ['in1', 'mes', 'max', 'promedio', 'min'].map((c) => header.indexOf(c));
   if (cols.some((i) => i < 0)) throw new Error(`${path} no tiene las columnas in1,mes,max,promedio,min`);
   const reference = new Map();
   for (const line of lines.slice(1)) {
-    const [in1, mes, ...stats] = cols.map((i) => (line.split(',')[i] ?? '').trim());
+    const row = cells(line);
+    const [in1, mes, ...stats] = cols.map((i) => row[i] ?? '');
     if (!/^\d{5}$/.test(in1) || !/^\d{2}$/.test(mes) || stats.some((s) => s === '' || !Number.isFinite(Number(s)))) continue;
     const [max, mean, min] = stats.map(Number);
     reference.set(`${in1}-${mes}`, { max, mean, min });
