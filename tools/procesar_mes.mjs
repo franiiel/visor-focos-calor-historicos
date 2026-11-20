@@ -9,7 +9,9 @@
 //
 // Uso:
 //   procesar_focos.exe [--fuente viirs]   (procesa cada nasa/<fuente>/ con descargas nuevas -> datos/<fuente>/,
-//                                          junto al ejecutable; con --fuente, solo esa)
+//                                          ambas junto al ejecutable, con el histórico de
+//                                          visor_deptos/datos/<fuente>/, al lado o un nivel arriba; con
+//                                          --fuente, solo esa)
 //   node tools/procesar_mes.mjs --nasa <carpeta> [--fuente modis] [--datos visor_deptos/datos/<fuente>]
 //        [--geojson tools/raw/DEPTOS-PROV.geojson] [--config visor_deptos/config.json]
 //
@@ -51,9 +53,10 @@ function readMonthValues(text, name, config) {
 
 const PROCESSED = 'procesados';
 
-// Procesa la descarga de FIRMS de nasaDir y escribe el mes en datosDir. Devuelve { month, name,
-// assigned, outside }. Valida todo antes de escribir: ante un error las carpetas quedan como estaban.
-export function processMonth({ nasaDir, datosDir, geojson, config, log = () => {} }) {
+// Procesa la descarga de FIRMS de nasaDir y escribe el mes en datosDir; el histórico para la referencia se
+// lee de historyDir (por defecto, la misma carpeta). Devuelve { month, name, assigned, outside }. Valida
+// todo antes de escribir: ante un error las carpetas quedan como estaban.
+export function processMonth({ nasaDir, datosDir, historyDir = datosDir, geojson, config, log = () => {} }) {
   if (!existsSync(nasaDir)) throw new Error(`No existe la carpeta ${nasaDir}: créela y copie ahí la descarga de NASA`);
   const downloads = readdirSync(nasaDir, { recursive: true })
     .filter((f) => f.toLowerCase().endsWith('.csv') && f.split(sep)[0] !== PROCESSED)
@@ -126,10 +129,15 @@ export function processMonth({ nasaDir, datosDir, geojson, config, log = () => {
   // descarga reemplazan a su archivo previo, como si se hubieran procesado uno por uno en orden.
   const known = new Map();
   const monthly = new RegExp(`^${config.filePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_(\\d{6})\\.csv$`);
-  for (const f of (existsSync(datosDir) ? readdirSync(datosDir) : []).sort()) {
+  for (const f of (existsSync(historyDir) ? readdirSync(historyDir) : []).sort()) {
     const m = f.match(monthly)?.[1];
     if (!m || m < from || m > to || months.includes(m)) continue;
-    known.set(m, readMonthValues(readFileSync(join(datosDir, f), 'utf8'), f, config));
+    known.set(m, readMonthValues(readFileSync(join(historyDir, f), 'utf8'), f, config));
+  }
+  // Sin ningún mes del histórico, todas las clases saldrían vacías y el mes se vería sin anomalía en el visor.
+  // referencia.csv no alcanza: la referencia se arma con los CSV mensuales.
+  if (!known.size) {
+    throw new Error(`No hay histórico en ${historyDir}: faltan los ${config.filePrefix}_AAAAMM.csv de ${from}–${to}, necesarios para calcular la anomalía`);
   }
 
   const files = months.map((month) => {
@@ -187,10 +195,16 @@ function moveToProcessed(nasaDir) {
 }
 
 // Lo que corre el .exe: procesa cada fuente de config.json que tiene una descarga nueva en
-// <root>/nasa/<id>/ (sin distinguir mayúsculas) y escribe en <root>/datos/<id>/. Con fuente, solo
-// esa. Devuelve [{ id, datosDir, ...resultado de processMonth } | { id, error }]: el error de una
-// fuente no impide procesar las demás.
+// <root>/nasa/<id>/ (sin distinguir mayúsculas). Lee el histórico de visor_deptos/datos/<id>/ (junto a
+// root o un nivel arriba) y escribe el mes solo en <root>/datos/<id>/: visor_deptos/ nunca se modifica.
+// Con fuente, solo esa. Devuelve [{ id, datosDir, ...resultado de processMonth } | { id, error }]: el
+// error de una fuente no impide procesar las demás.
 export function processSources({ root, geojson, configText, fuente = null, log = () => {} }) {
+  // visor_deptos/ junto al programa o en la carpeta de arriba (p. ej. el .exe en dist/ dentro del repositorio).
+  const visorDir = [join(root, 'visor_deptos'), join(dirname(root), 'visor_deptos')].find((d) => existsSync(d));
+  if (!visorDir) {
+    throw new Error(`No se encontró la carpeta visor_deptos junto al programa (${root}) ni en la carpeta de arriba: de visor_deptos/datos/<fuente>/ se lee el histórico`);
+  }
   const nasaRoot = join(root, 'nasa');
   const entries = existsSync(nasaRoot) ? readdirSync(nasaRoot) : [];
   const ids = fuente ? [sourceConfig(configText, fuente).id] : JSON.parse(configText.replace(/^﻿/, '')).sources.map((s) => s.id);
@@ -200,9 +214,10 @@ export function processSources({ root, geojson, configText, fuente = null, log =
   return pending.map((id) => {
     const config = sourceConfig(configText, id);
     const datosDir = join(root, 'datos', id);
+    const historyDir = join(visorDir, 'datos', id);
     try {
-      log(`${id}: procesando ${nasaDirOf(id)}`);
-      return { id, datosDir, ...processMonth({ nasaDir: nasaDirOf(id), datosDir, geojson, config, log }) };
+      log(`${id}: procesando ${nasaDirOf(id)} con el histórico de ${historyDir}`);
+      return { id, datosDir, ...processMonth({ nasaDir: nasaDirOf(id), datosDir, historyDir, geojson, config, log }) };
     } catch (err) {
       return { id, error: err.message };
     }
@@ -238,7 +253,8 @@ function parseArgs(argv, isExe) {
 function main() {
   const opts = parseArgs(process.argv.slice(2), sea.isSea());
   if (sea.isSea()) {
-    // La geometría y config.json van embebidos en el .exe; nasa/<fuente>/ y datos/<fuente>/ están junto al ejecutable.
+    // La geometría y config.json van embebidos en el .exe; nasa/<fuente>/ y datos/<fuente>/ están junto al
+    // ejecutable, y visor_deptos/ (solo lectura) al lado o un nivel arriba.
     return processSources({
       root: dirname(process.execPath),
       geojson: JSON.parse(sea.getAsset('geojson', 'utf8').replace(/^﻿/, '')),

@@ -193,7 +193,16 @@ function monthly_build($points, $month, $depts, $dataDir, $config)
     $from = $config['climatology']['from'];
     $to = $config['climatology']['to'];
     $reference = [];
-    foreach (series_list_csv($dataDir, $config['filePrefix']) as list($m, $path)) {
+    $files = series_list_csv($dataDir, $config['filePrefix']);
+    // Sin ningún mes del histórico, todas las clases saldrían vacías y el mes se vería sin anomalía en el visor
+    // (misma regla que tools/procesar_mes.mjs).
+    $history = array_filter(array_column($files, 0), function ($m) use ($month, $from, $to) {
+        return $m !== $month && $m >= $from && $m <= $to;
+    });
+    if (!$history) {
+        throw new RuntimeException("No history in $dataDir: the {$config['filePrefix']}_AAAAMM.csv files of $from-$to are needed to classify the month");
+    }
+    foreach ($files as list($m, $path)) {
         if ($m === $month || substr($m, 4) !== substr($month, 4) || $m < $from || $m > $to) {
             continue;
         }

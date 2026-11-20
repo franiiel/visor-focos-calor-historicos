@@ -175,14 +175,43 @@ test('processSources runs every source with a download in nasa/<id> and skips th
     mkdirSync(join(root, 'nasa', 'modis'), { recursive: true });
     mkdirSync(join(root, 'nasa', 'VIIRS'), { recursive: true });
     writeFileSync(join(root, 'nasa', 'VIIRS', 'fire_archive_x.csv'), HEADER + row(0.5, 0.5, '2003-01-10'));
+    // Sin visor_deptos/ junto al programa no hay dónde leer el histórico ni escribir el mes.
+    assert.throws(() => processSources({ root, geojson: GEO, configText }), /No se encontró la carpeta visor_deptos/);
+    const viirsDatos = join(root, 'visor_deptos', 'datos', 'viirs');
+    mkdirSync(viirsDatos, { recursive: true });
+    writeFileSync(join(viirsDatos, 'focos_200101.csv'), 'in1,focos,anomalia\n06021,2,1\n22007,1,4\n');
+    writeFileSync(join(viirsDatos, 'focos_200201.csv'), 'in1,focos,anomalia\n06021,4,4\n22007,0,1\n');
     const results = processSources({ root, geojson: GEO, configText });
     assert.deepEqual(results.map((r) => [r.id, r.error ?? r.name]), [['viirs', 'focos_200301.csv']]);
-    assert.ok(existsSync(join(root, 'datos', 'viirs', 'focos_200301.csv')));
+    // Clasificado con el histórico de visor_deptos/, pero escrito solo en datos/ junto al programa.
+    assert.equal(readFileSync(join(root, 'datos', 'viirs', 'focos_200301.csv'), 'utf8'), 'in1,focos,anomalia\n06021,1,1\n22007,0,1\n');
+    assert.deepEqual(readdirSync(viirsDatos), ['focos_200101.csv', 'focos_200201.csv']);
     assert.ok(!existsSync(join(root, 'datos', 'modis')));
     assert.throws(() => processSources({ root, geojson: GEO, configText }), /No hay descargas nuevas en nasa\/modis ni en nasa\/viirs/);
     assert.match(processSources({ root, geojson: GEO, configText, fuente: 'modis' })[0].error, /No hay ningún CSV de NASA/);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('processSources finds visor_deptos one level up (the .exe in dist/)', () => {
+  const base = mkdtempSync(join(tmpdir(), 'procesar_dist_test_'));
+  try {
+    const root = join(base, 'dist');
+    const configText = JSON.stringify({ ...CONFIG, climatology: undefined, sources: [{ id: 'modis', climatology: CONFIG.climatology }] });
+    mkdirSync(join(root, 'nasa', 'modis'), { recursive: true });
+    writeFileSync(join(root, 'nasa', 'modis', 'fire_nrt_x.csv'), HEADER + row(0.5, 0.5, '2003-01-10'));
+    const datos = join(base, 'visor_deptos', 'datos', 'modis');
+    mkdirSync(datos, { recursive: true });
+    writeFileSync(join(datos, 'focos_200101.csv'), 'in1,focos,anomalia\n06021,2,1\n22007,1,4\n');
+    const [result] = processSources({ root, geojson: GEO, configText });
+    assert.equal(result.error, undefined);
+    assert.equal(result.datosDir, join(root, 'datos', 'modis'));
+    assert.equal(readFileSync(join(root, 'datos', 'modis', 'focos_200301.csv'), 'utf8'), 'in1,focos,anomalia\n06021,1,1\n22007,0,1\n');
+    assert.deepEqual(readdirSync(datos), ['focos_200101.csv']);
+    assert.ok(!existsSync(join(root, 'visor_deptos')));
+  } finally {
+    rmSync(base, { recursive: true, force: true });
   }
 });
 
@@ -212,6 +241,16 @@ test('errors leave both folders untouched', async (t) => {
     withFolders(({ nasa, run }) => {
       rmSync(nasa, { recursive: true });
       assert.throws(run, /No existe la carpeta .*nasa/);
+    });
+  });
+  await t.test('no history of the climatology in datos/', () => {
+    withFolders(({ datos, nasa, run }) => {
+      for (const f of readdirSync(datos)) rmSync(join(datos, f));
+      writeFileSync(join(datos, 'referencia.csv'), 'in1,mes,max,promedio,min,desvio\n');
+      writeFileSync(join(nasa, 'descarga.csv'), HEADER + row(0.5, 0.5, '2003-01-10'));
+      const before = [readdirSync(datos), readdirSync(nasa)];
+      assert.throws(run, /No hay histórico en .*datos: faltan los focos_AAAAMM\.csv de 200101–200212/);
+      assert.deepEqual([readdirSync(datos), readdirSync(nasa)], before);
     });
   });
   await t.test('a monthly CSV without the configured columns', () => {

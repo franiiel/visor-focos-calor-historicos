@@ -134,9 +134,11 @@ list($code, , $err) = run_cli(['--mes', '200302', '--bogus', 'x']);
 check('unknown option: exit 1', $code === 1 && strpos($err, '--bogus') !== false);
 list($code, , $err) = run_cli(array_merge($base, ['--fuente', '../modis', '--mes', '200301', '--csv', "$dir/focos.csv"]));
 check('unknown --fuente: exit 1 naming it', $code === 1 && strpos($err, '../modis') !== false && scandir("$dir/datos") === $before);
-// --fuente viirs usa la climatología de VIIRS (sin meses de referencia aquí): sin clase.
-list($code) = run_cli(array_merge($base, ['--fuente', 'viirs', '--mes', '200301', '--csv', "$dir/focos.csv"]));
-check('--fuente viirs: its own climatology', $code === 0 && @file_get_contents("$dir/datos/focos_200301.csv") === "in1,focos,anomalia\n06021,5,\n22007,0,\n");
+// --fuente viirs usa la climatología de VIIRS (1999, sin meses en datos/): sin histórico no escribe nada.
+$before = scandir("$dir/datos");
+list($code, , $err) = run_cli(array_merge($base, ['--fuente', 'viirs', '--mes', '200301', '--csv', "$dir/focos.csv"]));
+check('--fuente viirs: its own climatology, no history -> exit 1, nothing written',
+    $code === 1 && scandir("$dir/datos") === $before && strpos($err, 'No history') !== false && strpos($err, '199901-199912') !== false);
 remove_dir($dir);
 
 echo "\n$checks checks, $failures failed\n";

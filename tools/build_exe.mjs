@@ -58,7 +58,7 @@ function main() {
   const exe = join(dist, 'procesar_focos.exe');
   copyFileSync(process.execPath, exe);
   runNpx(['--yes', POSTJECT, exe, 'NODE_SEA_BLOB', join(dist, 'sea-prep.blob'), '--sentinel-fuse', SEA_FUSE]);
-  console.log(`Wrote ${exe}. Distribute it with a nasa/<fuente>/ folder per source for its FIRMS download and a datos/<fuente>/ folder per source holding the monthly <filePrefix>_AAAAMM.csv history (or drop the whole FIRMS archive in nasa/<fuente>/ to build it).`);
+  console.log(`Wrote ${exe}. Put it next to the visor_deptos/ folder or one level below it, e.g. in dist/: it reads the history from visor_deptos/datos/<fuente>/ (never writing there), takes the FIRMS download from nasa/<fuente>/ and writes the month to datos/<fuente>/, both next to it (drop the whole FIRMS archive in nasa/<fuente>/ to build the history).`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
