@@ -7,8 +7,6 @@
 // para usar los stubs de tools/sepa_local/.
 $root = getenv('SEPA_ROOT') ?: '../../../../';
 $seccion = 'Productos';
-// Carpeta del visor, para el enlace a metodologia.pdf de la caja de producto.
-$base = '.';
 
 // Invalidación de caché: la versión cambia cada vez que cambia el archivo.
 function asset_version($file)
@@ -75,21 +73,15 @@ header('Content-Type: text/html; charset=utf-8');
 
             <div class="cajaProductos">
 
-                <h2><a href="<?php echo $root; ?>productos/" class="seccion">AgroENSO</a><br>
-                Efecto del ENSO
-                <br> (El Niño - Oscilación del Sur) sobre el rendimiento de cultivos</h2>
-                <p>Muestra cómo cambia el rendimiento de los principales cultivos de Argentina, Brasil y Uruguay según la fase ENSO (El Niño, Neutral o La Niña) de cada campaña. El rendimiento se corrige por la tendencia tecnológica y se compara entre fases en distintos niveles geográficos.
+                <h2><a href="<?php echo $root; ?>productos/" class="seccion">Anomalías mensuales</a><br>
+                Frecuencia y anomalía histórica mensual de focos de calor</h2>
+                <p>Muestra cómo cambia la frecuencia de focos de calor mensualmente desde el 2001 hasta la actualidad en función de medidas estadísticas (promedio, máximo, mínimos) de la serie histórica registrada para cada departamento y provincia de Argentina.
 
                 <br><br>
                 <span>
-                Fuentes: Estimaciones Agrícolas (MAGyP), Producción Agrícola Municipal (IBGE), DIEA-MGAP e índice ONI (NOAA CPC).
+                Fuentes: Focos de calor FIRMS (Fire Information for Resource Management System).
                 <br>
-                <br>Autores<br>
-                <a href="mailto:monzon.jp@gmail.com">Juan Pablo Monzon</a> — Investigador Independiente CONICET<br>
-                Con colaboración de <a href="mailto:mercau.jorge@inta.gob.ar">Jorge Luis Mercau</a> &amp; <a href="mailto:aramburumerlos.f@inta.gob.ar">Fernando Aramburu-Merlos</a> — Investigadores INTA<br>
-                <br>Se agradece el uso citando la fuente.</span>
-                <br>
-                <br><a href="<?php echo htmlspecialchars($base); ?>/metodologia.pdf" target="_blank">Metodología y términos de uso<span></span></a>
+                <br>Consultas: <a href="mailto:fischer.maria@inta.gob.ar">fischer.maria@inta.gob.ar</a></span>
 
                 <br><br>
                 </p>
@@ -139,7 +131,7 @@ header('Content-Type: text/html; charset=utf-8');
 
     <aside class="visor-panel" id="panel">
       <div class="visor-panel-head">
-        <h2 id="panel-title">Argentina</h2>
+        <h2 id="panel-title">Distribución histórica mensual — Argentina</h2>
         <div class="visor-panel-actions">
           <details class="visor-download">
             <summary class="visor-icon-btn" aria-label="Descargar" title="Descargar">
@@ -166,7 +158,7 @@ header('Content-Type: text/html; charset=utf-8');
 
   <section class="visor-years" id="years" aria-labelledby="years-title">
     <div class="visor-panel-head">
-      <h2 id="years-title">Comparación por año</h2>
+      <h2 id="years-title">Distribución mensual por año seleccionado — Argentina</h2>
       <div class="visor-panel-actions">
         <details class="visor-download">
           <summary class="visor-icon-btn" aria-label="Descargar" title="Descargar">

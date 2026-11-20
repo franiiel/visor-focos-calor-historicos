@@ -53,6 +53,7 @@ const state = {
   years: [], // todos los años con datos, en orden ascendente
   yearSlots: new Map(), // año seleccionado -> posición de color (ver yearColor)
   yearsChart: null,
+  areaName: 'Argentina', // área elegida, usada en los títulos de los dos gráficos
 };
 
 // Paleta categórica en orden fijo (verificada para daltonismo). Un año conserva su color mientras
@@ -167,7 +168,7 @@ function renderLegend() {
   legend.replaceChildren();
   const title = document.createElement('div');
   title.className = 'visor-legend-title';
-  title.textContent = state.layer === 'anomaly' ? `Anomalía (${climPeriod()})` : `${UNIT_TITLE} en el mes`;
+  title.textContent = state.layer === 'anomaly' ? 'Anomalía' : `${UNIT_TITLE} en el mes`;
   legend.append(title);
   for (const item of legendItems(state.scale)) {
     const row = document.createElement('div');
@@ -346,12 +347,17 @@ function seriesWithoutData() {
   return true;
 }
 
+function setAreaName(name) {
+  state.areaName = name;
+  $('panel-title').textContent = `Distribución histórica mensual — ${name}`;
+}
+
 // Total de todo el país (código '') o de una provincia (código de 2 dígitos).
 async function showArea(code) {
   state.selected = null;
   state.province = code || null;
   state.geoLayer.setStyle(featureStyle);
-  $('panel-title').textContent = code ? state.provinces.get(code).name : 'Argentina';
+  setAreaName(code ? state.provinces.get(code).name : 'Argentina');
   if (seriesWithoutData()) return;
   $('panel-info').textContent = 'Cargando serie…';
   const token = seriesGuard.next();
@@ -376,7 +382,7 @@ async function selectDepartment(props) {
   $('sel-prov').value = state.province;
   fillDeptoSelect(state.province, props.in1);
   state.geoLayer.setStyle(featureStyle);
-  $('panel-title').textContent = `${props.depto} (${props.provincia})`;
+  setAreaName(`${props.depto} (${props.provincia})`);
   if (seriesWithoutData()) return;
   $('panel-info').textContent = 'Cargando serie…';
   const token = seriesGuard.next();
@@ -505,6 +511,7 @@ function renderChart() {
   const firstYear = years[0];
   const lastYear = years[years.length - 1];
   const starts = years.map((y) => lustrumStart(y, firstYear));
+  const isLustrumStart = (i) => i === 0 || starts[i] !== starts[i - 1];
   const lustrumLabel = (i) => {
     const to = Math.min(starts[i] + 4, lastYear);
     return to === starts[i] ? `${starts[i]}` : `${starts[i]}–${to}`;
@@ -556,7 +563,15 @@ function renderChart() {
       animation: false,
       interaction: { mode: 'index', intersect: false },
       scales: {
-        x: { ticks: { maxTicksLimit: 8, maxRotation: 0 }, grid: { display: false } },
+        x: {
+          ticks: {
+            autoSkip: false,
+            maxRotation: 0,
+            // Una etiqueta por lustro, alineada con las líneas de promedio; null oculta el tick y su línea.
+            callback: (_, i) => (isLustrumStart(i) ? String(years[i]) : null),
+          },
+          grid: { color: '#e5e5e5' },
+        },
         y: { beginAtZero: true, title: { display: true, text: UNIT_TITLE } },
       },
       plugins: {
@@ -645,7 +660,7 @@ function toggleYear(year, on) {
 function renderYearsChart() {
   const s = state.series;
   const years = [...state.yearSlots.keys()].sort((a, b) => a - b);
-  $('years-title').textContent = `Comparación por año — ${$('panel-title').textContent}`;
+  $('years-title').textContent = `Distribución mensual por año seleccionado — ${state.areaName}`;
   if (state.yearsChart) state.yearsChart.destroy();
   state.yearsChart = null;
   const wrap = $('years-chart-wrap');
