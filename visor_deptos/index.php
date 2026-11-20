@@ -7,8 +7,6 @@
 // para usar los stubs de tools/sepa_local/.
 $root = getenv('SEPA_ROOT') ?: '../../../../';
 $seccion = 'Productos';
-// Carpeta del visor, para el enlace a metodologia.pdf de la caja de producto.
-$base = '.';
 
 // Invalidación de caché: la versión cambia cada vez que cambia el archivo.
 function asset_version($file)
@@ -36,20 +34,18 @@ function h($text)
 header('Content-Type: text/html; charset=utf-8');
 ?>
 <!DOCTYPE html>
-<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7"> <![endif]-->
-<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8"> <![endif]-->
-<!--[if IE 8]>         <html class="no-js lt-ie9"> <![endif]-->
-<!--[if gt IE 8]><!--> <html class="no-js"> <!--<![endif]-->
+<html class="no-js" lang="es">
     <head>
         <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
         <title>SEPA | <?php echo h($config['title']); ?></title>
         <meta name="description" content="<?php echo h($config['title']); ?>: mapa interactivo mensual por departamento">
         <?php include($root . 'includes/keywords.php'); ?>
-        <meta name="viewport" content="width=device-width">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta property="og:image" content="<?php echo $root; ?>img/thumb.png">
         <link rel="shortcut icon" href="<?php echo $root; ?>favicon.ico">
-        <link href='http://fonts.googleapis.com/css?family=Roboto:700|Roboto+Condensed:400,700' rel='stylesheet' type='text/css'>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href='https://fonts.googleapis.com/css?family=Roboto:700|Roboto+Condensed:400,700' rel='stylesheet' type='text/css'>
         <link rel="stylesheet" href="<?php echo $root; ?>css/normalize.min.css">
         <link rel="stylesheet" href="<?php echo $root; ?>css/main.css">
         <link rel="stylesheet" href="<?php echo $root; ?>css/extras.css">
@@ -75,21 +71,15 @@ header('Content-Type: text/html; charset=utf-8');
 
             <div class="cajaProductos">
 
-                <h2><a href="<?php echo $root; ?>productos/" class="seccion">AgroENSO</a><br>
-                Efecto del ENSO
-                <br> (El Niño - Oscilación del Sur) sobre el rendimiento de cultivos</h2>
-                <p>Muestra cómo cambia el rendimiento de los principales cultivos de Argentina, Brasil y Uruguay según la fase ENSO (El Niño, Neutral o La Niña) de cada campaña. El rendimiento se corrige por la tendencia tecnológica y se compara entre fases en distintos niveles geográficos.
+                <h2><a href="<?php echo $root; ?>productos/" class="seccion">Anomalías mensuales</a><br>
+                Frecuencia y anomalía histórica mensual de focos de calor</h2>
+                <p>Muestra cómo cambia la frecuencia de focos de calor mensualmente desde el 2001 hasta la actualidad en función de medidas estadísticas (promedio, máximo, mínimos) de la serie histórica registrada para cada departamento y provincia de Argentina.
 
                 <br><br>
                 <span>
-                Fuentes: Estimaciones Agrícolas (MAGyP), Producción Agrícola Municipal (IBGE), DIEA-MGAP e índice ONI (NOAA CPC).
+                Fuentes: Focos de calor FIRMS (Fire Information for Resource Management System).
                 <br>
-                <br>Autores<br>
-                <a href="mailto:monzon.jp@gmail.com">Juan Pablo Monzon</a> — Investigador Independiente CONICET<br>
-                Con colaboración de <a href="mailto:mercau.jorge@inta.gob.ar">Jorge Luis Mercau</a> &amp; <a href="mailto:aramburumerlos.f@inta.gob.ar">Fernando Aramburu-Merlos</a> — Investigadores INTA<br>
-                <br>Se agradece el uso citando la fuente.</span>
-                <br>
-                <br><a href="<?php echo htmlspecialchars($base); ?>/metodologia.pdf" target="_blank">Metodología y términos de uso<span></span></a>
+                <br>Consultas: <a href="mailto:fischer.maria@inta.gob.ar">fischer.maria@inta.gob.ar</a></span>
 
                 <br><br>
                 </p>
@@ -139,17 +129,16 @@ header('Content-Type: text/html; charset=utf-8');
 
     <aside class="visor-panel" id="panel">
       <div class="visor-panel-head">
-        <h2 id="panel-title">Argentina</h2>
+        <h2 id="panel-title">Distribución histórica mensual — Argentina</h2>
         <div class="visor-panel-actions">
-          <details class="visor-download">
-            <summary class="visor-icon-btn" aria-label="Descargar" title="Descargar">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
-            </summary>
-            <div class="visor-download-menu">
-              <button type="button" id="chart-csv">Datos (CSV)</button>
-              <button type="button" id="chart-png">Imagen (PNG)</button>
-            </div>
-          </details>
+          <button type="button" class="visor-icon-btn" popovertarget="chart-download"
+                  aria-label="Descargar" title="Descargar">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+          </button>
+          <div class="visor-download-menu" id="chart-download" popover>
+            <button type="button" id="chart-csv">Datos (CSV)</button>
+            <button type="button" id="chart-png">Imagen (PNG)</button>
+          </div>
           <button type="button" class="visor-icon-btn" id="chart-expand" aria-pressed="false"
                   aria-label="Ampliar gráfico" title="Ampliar gráfico">
             <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
@@ -166,17 +155,16 @@ header('Content-Type: text/html; charset=utf-8');
 
   <section class="visor-years" id="years" aria-labelledby="years-title">
     <div class="visor-panel-head">
-      <h2 id="years-title">Comparación por año</h2>
+      <h2 id="years-title">Distribución mensual por año seleccionado — Argentina</h2>
       <div class="visor-panel-actions">
-        <details class="visor-download">
-          <summary class="visor-icon-btn" aria-label="Descargar" title="Descargar">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
-          </summary>
-          <div class="visor-download-menu">
-            <button type="button" id="years-csv">Datos (CSV)</button>
-            <button type="button" id="years-png">Imagen (PNG)</button>
-          </div>
-        </details>
+        <button type="button" class="visor-icon-btn" popovertarget="years-download"
+                aria-label="Descargar" title="Descargar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+        </button>
+        <div class="visor-download-menu" id="years-download" popover>
+          <button type="button" id="years-csv">Datos (CSV)</button>
+          <button type="button" id="years-png">Imagen (PNG)</button>
+        </div>
         <button type="button" class="visor-icon-btn" id="years-expand" aria-pressed="false"
                 aria-label="Ampliar gráfico" title="Ampliar gráfico">
           <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
@@ -213,6 +201,15 @@ echo json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
         integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
         crossorigin="anonymous"></script>
+<script>
+// Los menús de descarga usan popover (Baseline desde 2025): el polyfill (@oddbird/popover-polyfill 0.7.3,
+// copiado en vendor/ para no depender de un CDN) se carga solo en navegadores sin soporte.
+if (!Object.prototype.hasOwnProperty.call(HTMLElement.prototype, 'popover')) {
+  var popoverPolyfill = document.createElement('script');
+  popoverPolyfill.src = 'vendor/popover-polyfill/popover.iife.min.js';
+  document.head.appendChild(popoverPolyfill);
+}
+</script>
 <script type="module" src="app.js?v=<?php echo asset_version('app.js'); ?>"></script>
 
             <div class="clearfix"></div>

@@ -94,10 +94,11 @@ $config['sources'][0]['climatology'] = ['from' => '200101', 'to' => '200212'];
 $config['sources'][1]['climatology'] = ['from' => '199901', 'to' => '199912']; // VIIRS: sin referencia en datos/
 file_put_contents("$dir/config.json", json_encode($config));
 file_put_contents("$dir/geo.json", json_encode($geo));
-// Referencia de enero: 06021 tiene 2 y 4 (max 4, mean 3, min 2); 22007 tiene 1 y 0.
-file_put_contents("$dir/datos/focos_200101.csv", "in1,focos,anomalia\n06021,2,1\n22007,1,4\n");
-file_put_contents("$dir/datos/focos_200201.csv", "in1,focos,anomalia\n06021,4,4\n22007,0,1\n");
-file_put_contents("$dir/datos/focos_200202.csv", "in1,focos,anomalia\n06021,0,1\n22007,0,1\n");
+// Referencia fija (la que escribe tools/compute_anomalies.mjs) de un histórico 2001–2002 con enero
+// 06021: 2 y 4 (max 4, mean 3, min 2) y 22007: 1 y 0; mismo caso que tools/test/procesar_mes.test.mjs.
+$reference = "in1,mes,max,promedio,min,desvio\n06021,01,4,3,2,1.4142135623730951\n06021,02,0,0,0,0\n"
+    . "22007,01,1,0.5,0,0.7071067811865476\n22007,02,0,0,0,0\n";
+file_put_contents("$dir/datos/referencia.csv", $reference);
 $header = "latitude,longitude,brightness,scan,track,acq_date,acq_time,satellite,instrument,confidence,version,bright_t31,frp,daynight\n";
 $row = function ($lat, $lon, $date) {
     return "$lat,$lon,300,1,1,$date,0100,Terra,MODIS,50,6.1NRT,280,10,N\n";
@@ -113,11 +114,43 @@ check('every department, 0 when no hotspots, classified', @file_get_contents("$d
 check('log names the month, assigned and dropped', strpos($out, '200301') !== false && strpos($out, '5 assigned') !== false && strpos($out, '1 outside') !== false);
 check('no temporary file left', !glob("$dir/datos/*.tmp"));
 
-// Volver a procesar un mes dentro de la climatología usa sus nuevos conteos, no su archivo anterior.
+// La referencia es fija: un mes del período de climatología no se procesa.
+$before = scandir("$dir/datos");
 file_put_contents("$dir/focos02.csv", $header . str_repeat($row(0.5, 0.5, '2002-01-05'), 3));
-run_cli(array_merge($base, ['--mes', '200201', '--csv', "$dir/focos02.csv"]));
-// La referencia de enero ahora es 2 y 3: 3 > max 3 es falso, 3 > 2.75 -> clase 4.
-check('rerun inside the climatology', @file_get_contents("$dir/datos/focos_200201.csv") === "in1,focos,anomalia\n06021,3,4\n22007,0,1\n");
+list($code, , $err) = run_cli(array_merge($base, ['--mes', '200201', '--csv', "$dir/focos02.csv"]));
+check('month inside the climatology: exit 1 and nothing written',
+    $code === 1 && scandir("$dir/datos") === $before && strpos($err, 'inside the reference period (200101-200212)') !== false);
+
+// Una referencia.csv guardada por Excel («CSV UTF-8»: BOM, comillas, CRLF) da las mismas clases (como procesar_mes.mjs).
+$quotedLines = [];
+foreach (explode("\n", trim($reference)) as $line) {
+    $quotedLines[] = '"' . str_replace(',', '","', $line) . '"';
+}
+file_put_contents("$dir/datos/referencia.csv", "\xEF\xBB\xBF" . implode("\r\n", $quotedLines) . "\r\n");
+@unlink("$dir/datos/focos_200301.csv");
+list($code) = run_cli(array_merge($base, ['--mes', '200301', '--csv', "$dir/focos.csv"]));
+check('referencia.csv with BOM and quoted cells', $code === 0 && @file_get_contents("$dir/datos/focos_200301.csv") === "in1,focos,anomalia\n06021,5,5\n22007,0,1\n");
+file_put_contents("$dir/datos/referencia.csv", $reference);
+
+// Sin referencia.csv utilizable no escribe nada, aunque estén los CSV mensuales.
+$refCases = [
+    'missing referencia.csv' => [null, 'Missing'],
+    'empty referencia.csv' => ["in1,mes,max,promedio,min,desvio\n", 'no reference rows'],
+    'referencia.csv without its columns' => ["in1,mes,valor\n06021,01,1\n", 'in1,mes,max,promedio,min'],
+];
+foreach ($refCases as $name => list($content, $message)) {
+    unlink("$dir/datos/referencia.csv");
+    file_put_contents("$dir/datos/focos_200101.csv", "in1,focos,anomalia\n06021,2,1\n22007,1,4\n");
+    if ($content !== null) {
+        file_put_contents("$dir/datos/referencia.csv", $content);
+    }
+    $snapshot = scandir("$dir/datos");
+    list($code, , $err) = run_cli(array_merge($base, ['--mes', '200302', '--csv', "$dir/focos.csv"]));
+    check("$name: exit 1 and nothing written", $code === 1 && scandir("$dir/datos") === $snapshot && strpos($err, $message) !== false);
+    @unlink("$dir/datos/referencia.csv");
+    unlink("$dir/datos/focos_200101.csv");
+    file_put_contents("$dir/datos/referencia.csv", $reference);
+}
 
 $before = scandir("$dir/datos");
 file_put_contents("$dir/bad.csv", "Invalid MAP_KEY.\n");
@@ -134,9 +167,11 @@ list($code, , $err) = run_cli(['--mes', '200302', '--bogus', 'x']);
 check('unknown option: exit 1', $code === 1 && strpos($err, '--bogus') !== false);
 list($code, , $err) = run_cli(array_merge($base, ['--fuente', '../modis', '--mes', '200301', '--csv', "$dir/focos.csv"]));
 check('unknown --fuente: exit 1 naming it', $code === 1 && strpos($err, '../modis') !== false && scandir("$dir/datos") === $before);
-// --fuente viirs usa la climatología de VIIRS (sin meses de referencia aquí): sin clase.
-list($code) = run_cli(array_merge($base, ['--fuente', 'viirs', '--mes', '200301', '--csv', "$dir/focos.csv"]));
-check('--fuente viirs: its own climatology', $code === 0 && @file_get_contents("$dir/datos/focos_200301.csv") === "in1,focos,anomalia\n06021,5,\n22007,0,\n");
+// --fuente viirs usa la climatología de VIIRS (1999): 199905 cae dentro de su período, no del de MODIS.
+$before = scandir("$dir/datos");
+list($code, , $err) = run_cli(array_merge($base, ['--fuente', 'viirs', '--mes', '199905', '--csv', "$dir/focos.csv"]));
+check('--fuente viirs: its own climatology',
+    $code === 1 && scandir("$dir/datos") === $before && strpos($err, 'inside the reference period (199901-199912)') !== false);
 remove_dir($dir);
 
 echo "\n$checks checks, $failures failed\n";

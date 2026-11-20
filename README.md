@@ -77,13 +77,13 @@ FIRMS_MAP_KEY=xxxxxxxx
 
 - `FIRMS_MAP_KEY`: clave gratuita de <https://firms.modaps.eosdis.nasa.gov/api/map_key/>. Va solo en el entorno del cron, nunca en el repositorio.
 - Opciones: `--fuente <id>` (por defecto, la primera de `config.json`), `--mes AAAAMM` (por defecto, el mes anterior), `--source` (por defecto, `firmsSource` de la fuente: `MODIS_NRT` o `VIIRS_SNPP_NRT`; `MODIS_SP` o `VIIRS_SNPP_SP` para los datos definitivos), `--csv archivo.csv` (una descarga local de FIRMS en lugar de la API), `--config` y `--datos` (por defecto, `datos/<fuente>/`).
-- Aplica las mismas reglas que `tools/compute_anomalies.mjs` y toma las referencias de los CSV del período `climatology` de `datos/<fuente>/`. Por eso la serie histórica de esa fuente tiene que estar generada antes.
+- Aplica las mismas reglas que `tools/compute_anomalies.mjs` y clasifica el mes contra `datos/<fuente>/referencia.csv`: el máximo, el promedio y el mínimo de cada departamento y mes calendario en el período `climatology`. Esa referencia es fija y el mes nuevo no la modifica, así que `referencia.csv` tiene que estar generado antes (lo escribe `tools/compute_anomalies.mjs`). Si falta, está vacío o el mes cae dentro del período de referencia, termina con error y no escribe nada: los meses del período solo se rehacen regenerando el histórico completo.
 - Si algo falla (red, clave, respuesta que no es un CSV de FIRMS), termina con código 1, escribe el error en stderr y no deja ningún archivo. Si sale bien, escribe una línea con el mes, los focos asignados y los que quedaron fuera de todo departamento.
 - Solo corre desde la línea de comandos. Está en `lib/`, que no se sirve por web.
 
 ## Actualización mensual manual (`procesar_focos.exe`)
 
-Para una PC con Windows sin Node ni PHP. Se entrega `procesar_focos.exe` junto a dos carpetas:
+Para una PC con Windows sin Node ni PHP. `procesar_focos.exe` va junto a las carpetas `nasa/` y `datos/`. La referencia fija (máximo, promedio y mínimo de cada departamento y mes calendario en el período de referencia) la lee de `visor_deptos/datos/<fuente>/referencia.csv`, y busca `visor_deptos/` al lado del programa o una carpeta más arriba (por ejemplo, el `.exe` en `dist/` dentro del repositorio encuentra `../visor_deptos/`). `visor_deptos/` nunca se modifica, y el mes nuevo no cambia la referencia:
 
 ```
 procesar_focos.exe
@@ -91,18 +91,19 @@ nasa/
   modis/  <- acá se copia la descarga MODIS de FIRMS
   viirs/  <- acá se copia la descarga VIIRS S-NPP de FIRMS
 datos/
-  modis/  <- histórico focos_AAAAMM.csv (para la anomalía) y el mes nuevo, lo que se sube al visor
+  modis/  <- acá escribe el mes nuevo, lo que después se copia al visor
   viirs/  <- lo mismo para VIIRS S-NPP
+../visor_deptos/datos/modis/referencia.csv  <- de acá lee la referencia (para la anomalía), sin modificarla
 ```
 
 1. Descargar de NASA FIRMS los focos de Argentina de los meses nuevos (uno o varios) en CSV (si viene en `.zip`, descomprimirlo).
 2. Copiar la descarga en la carpeta de su sensor, `nasa/modis/` o `nasa/viirs/`: los CSV sueltos o la carpeta `DL_FIRE_*` entera, tal como viene.
 3. Hacer doble clic en `procesar_focos.exe`. Procesa cada carpeta de `nasa/` que tenga una descarga nueva, escribe `datos/<fuente>/focos_AAAAMM.csv` y mueve la descarga a `nasa/<fuente>/procesados/`. Con `--fuente <id>` (desde una consola) procesa solo esa fuente.
-4. Subir `focos_AAAAMM.csv` a la carpeta `datos/<fuente>/` del visor.
+4. Copiar el `focos_AAAAMM.csv` nuevo a `visor_deptos/datos/<fuente>/` y subirlo a la misma carpeta del visor en el sitio.
 
-**Histórico completo.** Si la descarga cubre toda la climatología de la fuente (por ejemplo, el archive de VIIRS desde 2012 más el NRT), en lugar de un mes rearma todos los meses de la descarga y `referencia.csv`, igual que `tools/compute_anomalies.mjs`. Sirve para armar `datos/<fuente>/` la primera vez. El último mes de la descarga puede estar incompleto: conviene volver a procesarlo cuando termine.
+**Histórico completo.** Si la descarga cubre toda la climatología de la fuente (por ejemplo, el archive de VIIRS desde 2012 más el NRT), en lugar de un mes rearma todos los meses de la descarga y `referencia.csv` en `datos/<fuente>/`, igual que `tools/compute_anomalies.mjs`. Sirve para armar el histórico la primera vez, que después se copia a `visor_deptos/datos/<fuente>/`; para esto no hace falta tener `visor_deptos/`. El último mes de la descarga puede estar incompleto: conviene volver a procesarlo cuando termine.
 
-Si la descarga trae varios meses, escribe uno por mes, igual que si se procesaran de a uno en orden; un mes sin focos en el medio sale con ceros. Muestra la fecha del primer y del último foco, y avisa (sin dejar de procesarlo) si el primer mes empieza después del día 1 o el último termina antes de fin de mes, porque puede estar incompleto: por ejemplo, el mes en curso. Si no es un CSV de FIRMS o falta algún CSV del histórico, muestra el error de esa fuente y no escribe ni mueve nada de ella. Da exactamente el mismo archivo que `actualizar_mes.php --csv`. Para probarlo sin compilar: `node tools/procesar_mes.mjs --nasa <carpeta> [--fuente <id>] [--datos <carpeta>]` (además acepta `--geojson` y `--config`).
+Si la descarga trae varios meses, escribe uno por mes, igual que si se procesaran de a uno en orden; un mes sin focos en el medio sale con ceros. Muestra la fecha del primer y del último foco, y avisa (sin dejar de procesarlo) si el primer mes empieza después del día 1 o el último termina antes de fin de mes, porque puede estar incompleto: por ejemplo, el mes en curso. Si no encuentra `visor_deptos/` junto al programa ni una carpeta más arriba, no es un CSV de FIRMS, falta `referencia.csv` (o está vacío) o algún mes de la descarga cae dentro del período de referencia (la referencia es fija: esos meses solo se rehacen con el histórico completo), muestra el error de esa fuente y no escribe ni mueve nada de ella. Da exactamente el mismo archivo que `actualizar_mes.php --csv`. Para probarlo sin compilar: `node tools/procesar_mes.mjs --nasa <carpeta> [--fuente <id>] [--datos <carpeta>]` (además acepta `--geojson` y `--config`).
 
 Compilarlo (en Windows, necesita `tools/raw/DEPTOS-PROV.geojson`; usa esbuild y postject con versión fija vía npx):
 

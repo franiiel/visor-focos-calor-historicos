@@ -53,6 +53,7 @@ const state = {
   years: [], // todos los años con datos, en orden ascendente
   yearSlots: new Map(), // año seleccionado -> posición de color (ver yearColor)
   yearsChart: null,
+  areaName: 'Argentina', // área elegida, usada en los títulos de los dos gráficos
 };
 
 // Paleta categórica en orden fijo (verificada para daltonismo). Un año conserva su color mientras
@@ -167,7 +168,7 @@ function renderLegend() {
   legend.replaceChildren();
   const title = document.createElement('div');
   title.className = 'visor-legend-title';
-  title.textContent = state.layer === 'anomaly' ? `Anomalía (${climPeriod()})` : `${UNIT_TITLE} en el mes`;
+  title.textContent = state.layer === 'anomaly' ? 'Anomalía' : `${UNIT_TITLE} en el mes`;
   legend.append(title);
   for (const item of legendItems(state.scale)) {
     const row = document.createElement('div');
@@ -346,12 +347,17 @@ function seriesWithoutData() {
   return true;
 }
 
+function setAreaName(name) {
+  state.areaName = name;
+  $('panel-title').textContent = `Distribución histórica mensual — ${name}`;
+}
+
 // Total de todo el país (código '') o de una provincia (código de 2 dígitos).
 async function showArea(code) {
   state.selected = null;
   state.province = code || null;
   state.geoLayer.setStyle(featureStyle);
-  $('panel-title').textContent = code ? state.provinces.get(code).name : 'Argentina';
+  setAreaName(code ? state.provinces.get(code).name : 'Argentina');
   if (seriesWithoutData()) return;
   $('panel-info').textContent = 'Cargando serie…';
   const token = seriesGuard.next();
@@ -376,7 +382,7 @@ async function selectDepartment(props) {
   $('sel-prov').value = state.province;
   fillDeptoSelect(state.province, props.in1);
   state.geoLayer.setStyle(featureStyle);
-  $('panel-title').textContent = `${props.depto} (${props.provincia})`;
+  setAreaName(`${props.depto} (${props.provincia})`);
   if (seriesWithoutData()) return;
   $('panel-info').textContent = 'Cargando serie…';
   const token = seriesGuard.next();
@@ -400,19 +406,38 @@ async function selectDepartment(props) {
   renderChart();
 }
 
+// Mientras está ampliado, el panel vive dentro de un <dialog> modal: el navegador retiene el foco, cierra con
+// Escape y bloquea la página de atrás. Un marcador guarda su lugar en la grilla para devolverlo al cerrar.
 function setupChartExpand(btnId, panelId) {
   const btn = $(btnId);
   const panel = $(panelId);
-  const setExpanded = (on) => {
-    panel.classList.toggle('is-expanded', on);
+  const dialog = document.createElement('dialog');
+  dialog.className = 'visor-expand';
+  dialog.setAttribute('aria-labelledby', panel.querySelector('h2').id);
+  $('visor').append(dialog);
+  const placeholder = document.createComment('');
+  const setButton = (on) => {
     btn.setAttribute('aria-pressed', String(on));
     const label = on ? 'Reducir gráfico' : 'Ampliar gráfico';
     btn.setAttribute('aria-label', label);
     btn.title = label;
   };
-  btn.addEventListener('click', () => setExpanded(!panel.classList.contains('is-expanded')));
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') setExpanded(false);
+  btn.addEventListener('click', () => {
+    if (dialog.open) {
+      dialog.close();
+      return;
+    }
+    panel.before(placeholder);
+    dialog.append(panel);
+    panel.classList.add('is-expanded');
+    setButton(true);
+    dialog.showModal();
+  });
+  dialog.addEventListener('close', () => {
+    placeholder.replaceWith(panel);
+    panel.classList.remove('is-expanded');
+    setButton(false);
+    btn.focus();
   });
 }
 
@@ -464,14 +489,29 @@ function setupDownloads() {
   $('years-png').addEventListener('click', () => {
     if (state.series && state.yearsChart) downloadPng(state.yearsChart, `${downloadName('comparacion')}.png`);
   });
-  // <details> no se cierra solo: se cierra al elegir una opción, al hacer clic afuera o con Escape.
-  const menus = [...document.querySelectorAll('.visor-download')];
-  document.addEventListener('click', (e) => {
-    for (const d of menus) if (!d.contains(e.target) || e.target.closest('.visor-download-menu')) d.open = false;
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') for (const d of menus) d.open = false;
-  });
+  // El popover ya se cierra con un clic afuera y con Escape; falta cerrarlo al elegir una opción.
+  // Está en la capa superior, fuera del flujo: se ubica debajo del botón al abrirse y se cierra si la página
+  // se desplaza o cambia de tamaño, para que no quede separado del botón.
+  for (const menu of document.querySelectorAll('.visor-download-menu')) {
+    const trigger = document.querySelector(`[popovertarget="${menu.id}"]`);
+    menu.addEventListener('click', (e) => {
+      if (e.target.closest('button')) menu.hidePopover();
+    });
+    // beforetoggle, no toggle: toggle llega después de mostrarse y el menú aparecería un instante fuera de lugar.
+    menu.addEventListener('beforetoggle', (e) => {
+      if (e.newState !== 'open') return;
+      const rect = trigger.getBoundingClientRect();
+      menu.style.top = `${rect.bottom + 4}px`;
+      menu.style.right = `${document.documentElement.clientWidth - rect.right}px`;
+    });
+  }
+  const closeMenus = () => {
+    for (const menu of document.querySelectorAll('.visor-download-menu')) {
+      if (menu.matches(':is(:popover-open, .\\:popover-open)')) menu.hidePopover();
+    }
+  };
+  window.addEventListener('scroll', closeMenus, { passive: true });
+  window.addEventListener('resize', closeMenus);
 }
 
 function chartLabels(months) {
@@ -505,6 +545,7 @@ function renderChart() {
   const firstYear = years[0];
   const lastYear = years[years.length - 1];
   const starts = years.map((y) => lustrumStart(y, firstYear));
+  const isLustrumStart = (i) => i === 0 || starts[i] !== starts[i - 1];
   const lustrumLabel = (i) => {
     const to = Math.min(starts[i] + 4, lastYear);
     return to === starts[i] ? `${starts[i]}` : `${starts[i]}–${to}`;
@@ -556,7 +597,15 @@ function renderChart() {
       animation: false,
       interaction: { mode: 'index', intersect: false },
       scales: {
-        x: { ticks: { maxTicksLimit: 8, maxRotation: 0 }, grid: { display: false } },
+        x: {
+          ticks: {
+            autoSkip: false,
+            maxRotation: 0,
+            // Una etiqueta por lustro, alineada con las líneas de promedio; null oculta el tick y su línea.
+            callback: (_, i) => (isLustrumStart(i) ? String(years[i]) : null),
+          },
+          grid: { color: '#e5e5e5' },
+        },
         y: { beginAtZero: true, title: { display: true, text: UNIT_TITLE } },
       },
       plugins: {
@@ -645,7 +694,7 @@ function toggleYear(year, on) {
 function renderYearsChart() {
   const s = state.series;
   const years = [...state.yearSlots.keys()].sort((a, b) => a - b);
-  $('years-title').textContent = `Comparación por año — ${$('panel-title').textContent}`;
+  $('years-title').textContent = `Distribución mensual por año seleccionado — ${state.areaName}`;
   if (state.yearsChart) state.yearsChart.destroy();
   state.yearsChart = null;
   const wrap = $('years-chart-wrap');

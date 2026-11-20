@@ -30,17 +30,20 @@ const CONFIG = {
 const HEADER = 'latitude,longitude,brightness,scan,track,acq_date,acq_time,satellite,instrument,confidence,version,bright_t31,frp,daynight\n';
 const row = (lat, lon, date) => `${lat},${lon},300,1,1,${date},0100,Terra,MODIS,50,6.1NRT,280,10,N\n`;
 
-// Crea <tmp>/datos con el histórico y <tmp>/nasa vacía; ejecuta fn y borra todo al final.
+// referencia.csv de un histórico 2001–2002 con enero 06021: 2 y 4, 22007: 1 y 0; febrero en cero.
+// Enero: 06021 max 4, promedio 3, min 2; 22007 max 1, promedio 0.5, min 0. Sin fila: sin referencia.
+const REFERENCE = 'in1,mes,max,promedio,min,desvio\n'
+  + '06021,01,4,3,2,1.4142135623730951\n06021,02,0,0,0,0\n'
+  + '22007,01,1,0.5,0,0.7071067811865476\n22007,02,0,0,0,0\n';
+
+// Crea <tmp>/datos con referencia.csv y <tmp>/nasa vacía; ejecuta fn y borra todo al final.
 function withFolders(fn) {
   const root = mkdtempSync(join(tmpdir(), 'procesar_mes_test_'));
   const datos = join(root, 'datos');
   const nasa = join(root, 'nasa');
   mkdirSync(datos);
   mkdirSync(nasa);
-  // Referencia de enero: 06021 tiene 2 y 4 (max 4, mean 3, min 2); 22007 tiene 1 y 0.
-  writeFileSync(join(datos, 'focos_200101.csv'), 'in1,focos,anomalia\n06021,2,1\n22007,1,4\n');
-  writeFileSync(join(datos, 'focos_200201.csv'), 'in1,focos,anomalia\n06021,4,4\n22007,0,1\n');
-  writeFileSync(join(datos, 'focos_200202.csv'), 'in1,focos,anomalia\n06021,0,1\n22007,0,1\n');
+  writeFileSync(join(datos, 'referencia.csv'), REFERENCE);
   const run = () => processMonth({ nasaDir: nasa, datosDir: datos, geojson: GEO, config: CONFIG });
   try {
     fn({ datos, nasa, run });
@@ -83,12 +86,23 @@ test('reprocessing a download with the same name replaces the processed copy', (
   });
 });
 
-test('rerunning a month inside the climatology uses its new counts, not its previous file', () => {
+test('a month inside the climatology is refused: the reference is fixed', () => {
   withFolders(({ datos, nasa, run }) => {
-    writeFileSync(join(nasa, 'descarga.csv'), HEADER + row(0.5, 0.5, '2002-01-05').repeat(3));
+    writeFileSync(join(nasa, 'descarga.csv'), HEADER + row(0.5, 0.5, '2002-12-05') + row(0.5, 0.5, '2003-01-05'));
+    const before = [readdirSync(datos), readdirSync(nasa)];
+    assert.throws(run, /2002-12 está dentro del período de referencia \(200101–200212\)/);
+    assert.deepEqual([readdirSync(datos), readdirSync(nasa)], before);
+  });
+});
+
+test('a referencia.csv re-saved with quoted cells gives the same classes (like fgetcsv in PHP)', () => {
+  withFolders(({ datos, nasa, run }) => {
+    // Como lo guarda Excel en «CSV UTF-8»: BOM, comillas y fin de línea CRLF.
+    const quoted = '﻿' + REFERENCE.trim().split('\n').map((l) => l.split(',').map((c) => `"${c}"`).join(',')).join('\r\n') + '\r\n';
+    writeFileSync(join(datos, 'referencia.csv'), quoted);
+    writeFileSync(join(nasa, 'descarga.csv'), HEADER + row(0.5, 0.5, '2003-01-10').repeat(5));
     run();
-    // La referencia de enero ahora es 2 y 3: 3 > max 3 es falso, 3 > 2.75 -> clase 4.
-    assert.equal(readFileSync(join(datos, 'focos_200201.csv'), 'utf8'), 'in1,focos,anomalia\n06021,3,4\n22007,0,1\n');
+    assert.equal(readFileSync(join(datos, 'focos_200301.csv'), 'utf8'), 'in1,focos,anomalia\n06021,5,5\n22007,0,1\n');
   });
 });
 
@@ -103,7 +117,6 @@ test('NRT points count only after the last archive day', () => {
 
 test('other CSVs in datos/ are not taken as downloads', () => {
   withFolders(({ datos, nasa, run }) => {
-    writeFileSync(join(datos, 'referencia.csv'), 'in1,mes,max,promedio,min,desvio\n');
     writeFileSync(join(datos, 'otro.csv'), 'a,b\n');
     writeFileSync(join(nasa, 'fire_archive_x.csv'), HEADER + row(0.5, 0.5, '2003-01-10'));
     assert.equal(run().assigned, 1);
@@ -121,7 +134,7 @@ test('a download covering the whole climatology rebuilds every month like comput
     const logged = [];
     const result = processMonth({ nasaDir: nasa, datosDir: datos, geojson: GEO, config: CONFIG, log: (m) => logged.push(m) });
     assert.ok(logged.some((m) => m.includes('se rearma el histórico completo')) && logged.some((m) => m.includes('100 %')), logged.join(' | '));
-    assert.deepEqual(result, { month: '200101 a 200301', name: 'focos_200101.csv … focos_200301.csv', files: 25, assigned: 7, outside: 1 });
+    assert.deepEqual(result, { month: '200101 a 200301', name: 'focos_200101.csv … focos_200301.csv', files: 25, rebuilt: true, assigned: 7, outside: 1 });
     for (const { name, content } of expected.files) assert.equal(readFileSync(join(datos, name), 'utf8'), content);
     assert.equal(readFileSync(join(datos, 'referencia.csv'), 'utf8'), expected.reference);
     assert.deepEqual(readdirSync(join(nasa, 'procesados')), ['fire_archive_x.csv', 'fire_nrt_x.csv']);
@@ -130,28 +143,29 @@ test('a download covering the whole climatology rebuilds every month like comput
 });
 
 test('a download of several months writes each month as if they were processed one by one', () => {
-  const dec = row(0.5, 0.5, '2002-12-15') + row(0.5, 0.5, '2002-12-31');
-  const feb = row(0.5, 1.1, '2003-02-01') + row(0.5, 0.5, '2003-02-10');
-  const names = ['focos_200212.csv', 'focos_200301.csv', 'focos_200302.csv'];
+  const jan = row(0.5, 0.5, '2003-01-15') + row(0.5, 0.5, '2003-01-31');
+  const mar = row(0.5, 1.1, '2003-03-01') + row(0.5, 0.5, '2003-03-10');
+  const names = ['focos_200301.csv', 'focos_200302.csv', 'focos_200303.csv'];
   let oneByOne;
   withFolders(({ datos, nasa, run }) => {
-    // Enero, de a uno, solo con un foco fuera de todo departamento: todo en cero.
-    for (const rows of [dec, row(9, 9, '2003-01-05'), feb]) {
+    // Febrero, de a uno, solo con un foco fuera de todo departamento: todo en cero.
+    for (const rows of [jan, row(9, 9, '2003-02-05'), mar]) {
       writeFileSync(join(nasa, 'descarga.csv'), HEADER + rows);
       run();
     }
     oneByOne = names.map((f) => readFileSync(join(datos, f), 'utf8'));
   });
   withFolders(({ datos, nasa }) => {
-    writeFileSync(join(nasa, 'fire_archive_x.csv'), HEADER + dec + feb);
+    writeFileSync(join(nasa, 'fire_archive_x.csv'), HEADER + jan + mar);
     const logged = [];
     const result = processMonth({ nasaDir: nasa, datosDir: datos, geojson: GEO, config: CONFIG, log: (m) => logged.push(m) });
-    assert.deepEqual(result, { month: '200212 a 200302', name: 'focos_200212.csv … focos_200302.csv', files: 3, assigned: 4, outside: 0 });
-    // Enero no tiene focos en la descarga: igual se escribe, con ceros.
+    assert.deepEqual(result, { month: '200301 a 200303', name: 'focos_200301.csv … focos_200303.csv', files: 3, assigned: 4, outside: 0 });
+    // Febrero no tiene focos en la descarga: igual se escribe, con ceros.
     assert.deepEqual(names.map((f) => readFileSync(join(datos, f), 'utf8')), oneByOne);
-    assert.ok(logged.includes('  datos del 15/12/2002 al 10/02/2003'), logged.join(' | '));
-    assert.ok(logged.some((m) => m.startsWith('  AVISO: 2002-12 empieza el 15/12/2002')), logged.join(' | '));
-    assert.ok(logged.some((m) => m.startsWith('  AVISO: 2003-02 termina el 10/02/2003')), logged.join(' | '));
+    assert.equal(oneByOne[1], 'in1,focos,anomalia\n06021,0,1\n22007,0,1\n');
+    assert.ok(logged.includes('  datos del 15/01/2003 al 10/03/2003'), logged.join(' | '));
+    assert.ok(logged.some((m) => m.startsWith('  AVISO: 2003-01 empieza el 15/01/2003')), logged.join(' | '));
+    assert.ok(logged.some((m) => m.startsWith('  AVISO: 2003-03 termina el 10/03/2003')), logged.join(' | '));
     assert.deepEqual(readdirSync(join(nasa, 'procesados')), ['fire_archive_x.csv']);
   });
 });
@@ -166,7 +180,9 @@ test('a complete month logs no warning', () => {
 });
 
 test('processSources runs every source with a download in nasa/<id> and skips the empty ones', () => {
-  const root = mkdtempSync(join(tmpdir(), 'procesar_sources_test_'));
+  // root un nivel adentro: processSources también busca visor_deptos/ en la carpeta de arriba.
+  const base = mkdtempSync(join(tmpdir(), 'procesar_sources_test_'));
+  const root = join(base, 'pc');
   try {
     const configText = JSON.stringify({ ...CONFIG, climatology: undefined, sources: [
       { id: 'modis', climatology: CONFIG.climatology },
@@ -175,14 +191,63 @@ test('processSources runs every source with a download in nasa/<id> and skips th
     mkdirSync(join(root, 'nasa', 'modis'), { recursive: true });
     mkdirSync(join(root, 'nasa', 'VIIRS'), { recursive: true });
     writeFileSync(join(root, 'nasa', 'VIIRS', 'fire_archive_x.csv'), HEADER + row(0.5, 0.5, '2003-01-10'));
+    // Sin visor_deptos/ no hay de dónde leer la referencia: error de esa fuente, sin escribir ni mover nada.
+    const [missing] = processSources({ root, geojson: GEO, configText });
+    assert.match(missing.error, /No se encontró la carpeta visor_deptos/);
+    assert.ok(!existsSync(join(root, 'datos')));
+    assert.deepEqual(readdirSync(join(root, 'nasa', 'VIIRS')), ['fire_archive_x.csv']);
+    const viirsDatos = join(root, 'visor_deptos', 'datos', 'viirs');
+    mkdirSync(viirsDatos, { recursive: true });
+    writeFileSync(join(viirsDatos, 'referencia.csv'), REFERENCE);
     const results = processSources({ root, geojson: GEO, configText });
     assert.deepEqual(results.map((r) => [r.id, r.error ?? r.name]), [['viirs', 'focos_200301.csv']]);
-    assert.ok(existsSync(join(root, 'datos', 'viirs', 'focos_200301.csv')));
+    // Clasificado con la referencia de visor_deptos/, pero escrito solo en datos/ junto al programa.
+    assert.equal(readFileSync(join(root, 'datos', 'viirs', 'focos_200301.csv'), 'utf8'), 'in1,focos,anomalia\n06021,1,1\n22007,0,1\n');
+    assert.deepEqual(readdirSync(viirsDatos), ['referencia.csv']);
     assert.ok(!existsSync(join(root, 'datos', 'modis')));
     assert.throws(() => processSources({ root, geojson: GEO, configText }), /No hay descargas nuevas en nasa\/modis ni en nasa\/viirs/);
     assert.match(processSources({ root, geojson: GEO, configText, fuente: 'modis' })[0].error, /No hay ningún CSV de NASA/);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('processSources finds visor_deptos one level up (the .exe in dist/)', () => {
+  const base = mkdtempSync(join(tmpdir(), 'procesar_dist_test_'));
+  try {
+    const root = join(base, 'dist');
+    const configText = JSON.stringify({ ...CONFIG, climatology: undefined, sources: [{ id: 'modis', climatology: CONFIG.climatology }] });
+    mkdirSync(join(root, 'nasa', 'modis'), { recursive: true });
+    writeFileSync(join(root, 'nasa', 'modis', 'fire_nrt_x.csv'), HEADER + row(0.5, 0.5, '2003-01-10'));
+    const datos = join(base, 'visor_deptos', 'datos', 'modis');
+    mkdirSync(datos, { recursive: true });
+    writeFileSync(join(datos, 'referencia.csv'), REFERENCE);
+    const [result] = processSources({ root, geojson: GEO, configText });
+    assert.equal(result.error, undefined);
+    assert.equal(result.datosDir, join(root, 'datos', 'modis'));
+    assert.equal(readFileSync(join(root, 'datos', 'modis', 'focos_200301.csv'), 'utf8'), 'in1,focos,anomalia\n06021,1,1\n22007,0,1\n');
+    assert.deepEqual(readdirSync(datos), ['referencia.csv']);
+    assert.ok(!existsSync(join(root, 'visor_deptos')));
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('processSources rebuilds the whole history without a visor_deptos folder', () => {
+  const base = mkdtempSync(join(tmpdir(), 'procesar_rebuild_test_'));
+  try {
+    const root = join(base, 'pc');
+    const configText = JSON.stringify({ ...CONFIG, climatology: undefined, sources: [{ id: 'modis', climatology: CONFIG.climatology }] });
+    mkdirSync(join(root, 'nasa', 'modis'), { recursive: true });
+    const archive = HEADER + row(0.5, 0.5, '2001-01-03') + row(0.5, 1.1, '2002-12-09');
+    writeFileSync(join(root, 'nasa', 'modis', 'fire_archive_x.csv'), archive);
+    const [result] = processSources({ root, geojson: GEO, configText });
+    assert.equal(result.error, undefined);
+    assert.equal(result.files, 24);
+    const expected = computeAnomalies({ archive, nrt: null, geojson: GEO, config: CONFIG });
+    assert.equal(readFileSync(join(root, 'datos', 'modis', 'referencia.csv'), 'utf8'), expected.reference);
+  } finally {
+    rmSync(base, { recursive: true, force: true });
   }
 });
 
@@ -214,13 +279,24 @@ test('errors leave both folders untouched', async (t) => {
       assert.throws(run, /No existe la carpeta .*nasa/);
     });
   });
-  await t.test('a monthly CSV without the configured columns', () => {
-    withFolders(({ datos, nasa, run }) => {
-      writeFileSync(join(datos, 'focos_200101.csv'), 'in1,valor\n06021,1\n');
-      writeFileSync(join(nasa, 'descarga.csv'), HEADER + row(0.5, 0.5, '2003-01-10'));
-      assert.throws(run, /focos_200101\.csv/);
+  const referenceCases = [
+    ['no referencia.csv (only the monthly history)', null, /No está .*referencia\.csv: hace falta para calcular la anomalía \(máximo, promedio y mínimo de 200101–200212\)/],
+    ['an empty referencia.csv', 'in1,mes,max,promedio,min,desvio\n', /referencia\.csv no tiene ninguna fila/],
+    ['a referencia.csv without its columns', 'in1,mes,valor\n06021,01,1\n', /referencia\.csv no tiene las columnas in1,mes,max,promedio,min/],
+  ];
+  for (const [name, content, message] of referenceCases) {
+    await t.test(name, () => {
+      withFolders(({ datos, nasa, run }) => {
+        rmSync(join(datos, 'referencia.csv'));
+        if (content === null) writeFileSync(join(datos, 'focos_200101.csv'), 'in1,focos,anomalia\n06021,2,1\n22007,1,4\n');
+        else writeFileSync(join(datos, 'referencia.csv'), content);
+        writeFileSync(join(nasa, 'descarga.csv'), HEADER + row(0.5, 0.5, '2003-01-10'));
+        const before = [readdirSync(datos), readdirSync(nasa)];
+        assert.throws(run, message);
+        assert.deepEqual([readdirSync(datos), readdirSync(nasa)], before);
+      });
     });
-  });
+  }
 });
 
 test('reads an NRT download with hundreds of thousands of points', () => {
