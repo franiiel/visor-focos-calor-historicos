@@ -202,12 +202,11 @@ echo json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
         integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
         crossorigin="anonymous"></script>
 <script>
-// Los menús de descarga usan popover (Baseline desde 2025): el polyfill se carga solo en navegadores sin soporte.
+// Los menús de descarga usan popover (Baseline desde 2025): el polyfill (@oddbird/popover-polyfill 0.7.3,
+// copiado en vendor/ para no depender de un CDN) se carga solo en navegadores sin soporte.
 if (!Object.prototype.hasOwnProperty.call(HTMLElement.prototype, 'popover')) {
   var popoverPolyfill = document.createElement('script');
-  popoverPolyfill.src = 'https://cdn.jsdelivr.net/npm/@oddbird/popover-polyfill@0.7.3/dist/popover.iife.min.js';
-  popoverPolyfill.integrity = 'sha384-INwTyeGJ4Bk/YHI/urvNEearyioRlcY0f49uACR8MxYAtulvd/xSYR4b3746TPPL';
-  popoverPolyfill.crossOrigin = 'anonymous';
+  popoverPolyfill.src = 'vendor/popover-polyfill/popover.iife.min.js';
   document.head.appendChild(popoverPolyfill);
 }
 </script>
